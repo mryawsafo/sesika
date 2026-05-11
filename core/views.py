@@ -1,7 +1,10 @@
 import json
+import logging
 import uuid
 from decimal import Decimal
 from django.db.models import Count
+
+logger = logging.getLogger(__name__)
 
 import requests as http_client
 from django.conf import settings
@@ -141,7 +144,8 @@ def request_otp(request):
                 request.session['otp_token'] = data['token']
                 whatsapp_url = data['whatsapp_url']
                 token = data['token']
-            except Exception:
+            except Exception as e:
+                logger.error("OTP generate failed — URL: %s | Error: %s", settings.FREE_OTP_SERVICE_URL, e)
                 error = 'Could not reach verification service. Please try again.'
 
         elif action == 'check':
@@ -157,7 +161,8 @@ def request_otp(request):
                     )
                     resp.raise_for_status()
                     status_data = resp.json()
-                except Exception:
+                except Exception as e:
+                    logger.error("OTP check failed — URL: %s | Error: %s", settings.FREE_OTP_SERVICE_URL, e)
                     error = 'Could not reach verification service. Please try again.'
 
                 if status_data:
