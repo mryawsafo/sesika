@@ -1,4 +1,5 @@
 import os
+import sys
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
@@ -12,13 +13,18 @@ class Command(BaseCommand):
         password = os.environ.get('DJANGO_ADMIN_PASSWORD')
         email = os.environ.get('DJANGO_ADMIN_EMAIL', '')
 
+        print(f'[create_admin] DJANGO_ADMIN_USER={username}', flush=True)
+        print(f'[create_admin] DJANGO_ADMIN_PASSWORD set: {bool(password)}', flush=True)
+
         if not password:
-            self.stdout.write('DJANGO_ADMIN_PASSWORD not set — skipping admin creation.')
+            print('[create_admin] ERROR: DJANGO_ADMIN_PASSWORD not set — admin not created.', file=sys.stderr, flush=True)
             return
 
         if User.objects.filter(username=username).exists():
-            self.stdout.write(f'Admin "{username}" already exists — skipping.')
-            return
-
-        User.objects.create_superuser(username=username, email=email, password=password)
-        self.stdout.write(f'Superuser "{username}" created.')
+            user = User.objects.get(username=username)
+            user.set_password(password)
+            user.save()
+            print(f'[create_admin] Updated password for existing user "{username}".', flush=True)
+        else:
+            User.objects.create_superuser(username=username, email=email, password=password)
+            print(f'[create_admin] Superuser "{username}" created.', flush=True)
