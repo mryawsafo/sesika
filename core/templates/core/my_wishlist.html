@@ -1,0 +1,105 @@
+{% extends "core/base.html" %}
+
+{% block title %}Wishlist – Sesika{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Wishlist</h1>
+    <p class="page-subtitle">We'll notify you the moment a matching listing goes live on Sesika.</p>
+  </div>
+  <a href="{% url 'wishlist_create' %}" class="btn btn-primary">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5V19"/><path d="M5 12H19"/></svg>
+    Add wishlist item
+  </a>
+</div>
+
+{% if wishlist_items %}
+
+  {% if total_matches > 0 %}
+    <div class="wishlist-banner">
+      <div class="wb-icon">🔔</div>
+      <div class="wb-text">
+        <strong>You have {{ total_matches }} new match{{ total_matches|pluralize:"es" }} across your wishlist.</strong>
+        <span> Tap any item below to see what's available right now.</span>
+      </div>
+      <a href="{% url 'notifications' %}" class="btn btn-ghost btn-sm">View matches</a>
+    </div>
+  {% endif %}
+
+  <div class="wishlist-grid">
+    {% for item in wishlist_items %}
+      <article class="wishlist-card">
+        <div class="wishlist-thumb">
+          <span style="font-size:2.2rem; opacity:0.35;">
+            {% if item.category == 'electronics' %}📱
+            {% elif item.category == 'fashion' %}👗
+            {% elif item.category == 'vehicles' %}🚗
+            {% elif item.category == 'furniture' %}🛋️
+            {% elif item.category == 'appliances' %}🔌
+            {% elif item.category == 'tools' %}🔧
+            {% else %}🔍{% endif %}
+          </span>
+          {% if item.match_count > 0 %}
+            <span class="match-badge">
+              <span class="match-dot"></span>
+              {{ item.match_count }} match{{ item.match_count|pluralize:"es" }}
+            </span>
+          {% endif %}
+        </div>
+        <div class="wishlist-body">
+          {% if item.category %}
+            <div class="listing-meta-row">
+              <span>{{ item.get_category_display }}</span>
+            </div>
+          {% endif %}
+          <h3 class="listing-title">{{ item.title }}</h3>
+          {% if item.max_budget %}
+            <div class="wish-budget">
+              <span class="label-up">Up to</span>
+              <span class="wish-budget-val"><span class="ghs">GHS</span>{{ item.max_budget|floatformat:0 }}</span>
+            </div>
+          {% endif %}
+          {% if item.description %}
+            <div class="wish-trade-note">
+              <div class="label-up" style="color:var(--gold-deep); margin-bottom:2px;">Notes</div>
+              <div style="font-size:13px; color:#5b3c08; font-weight:600;">{{ item.description }}</div>
+            </div>
+          {% endif %}
+          {% with last=item.triggered_notifications.first %}
+            {% if last %}
+              <div class="wish-last-match">
+                <span class="match-pulse"></span>
+                Last match {{ last.created_at|timesince }} ago
+              </div>
+            {% endif %}
+          {% endwith %}
+          <div class="wishlist-actions">
+            {% if item.match_count > 0 %}
+              <a href="{% url 'notifications' %}" class="btn btn-primary btn-sm">
+                See {{ item.match_count }} match{{ item.match_count|pluralize:"es" }}
+              </a>
+            {% else %}
+              <span class="btn btn-ghost btn-sm" style="opacity:0.6; cursor:default;">Waiting for matches…</span>
+            {% endif %}
+            <a href="{% url 'wishlist_edit' item.pk %}" class="btn btn-ghost btn-sm">Edit</a>
+            <form method="post" action="{% url 'wishlist_delete' item.pk %}"
+                  onsubmit="return confirm('Remove this item from your wishlist?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--danger);">Remove</button>
+            </form>
+          </div>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+
+{% else %}
+  <div class="empty">
+    <div class="empty-icon">🔍</div>
+    <div class="empty-title">Wishlist is empty</div>
+    <div class="empty-sub">Add what you're hunting for — we'll ping you the moment a matching listing goes live.</div>
+    <a href="{% url 'wishlist_create' %}" class="btn btn-primary" style="margin-top:4px;">Add a wishlist item</a>
+  </div>
+{% endif %}
+{% endblock %}

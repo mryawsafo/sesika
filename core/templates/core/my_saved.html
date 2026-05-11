@@ -1,0 +1,62 @@
+{% extends "core/base.html" %}
+
+{% block title %}Saved Listings – Sesika{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Saved Listings</h1>
+    <p class="page-subtitle">Items you've bookmarked for later.</p>
+  </div>
+</div>
+
+{% if saved_listings %}
+  <div class="listing-grid">
+    {% for save in saved_listings %}
+      {% with listing=save.listing %}
+      <article class="listing-card">
+        <a href="{% url 'listing_detail' listing.pk %}" style="display:contents;">
+          <div class="listing-thumb">
+            {% if listing.image %}
+              <img src="{{ listing.image.url }}" alt="{{ listing.title }}" loading="lazy" />
+            {% else %}
+              <span style="font-size:1.5rem; opacity:0.4;">📦</span>
+            {% endif %}
+            <span class="condition-badge {{ listing.condition }}">{{ listing.get_condition_display }}</span>
+          </div>
+          <div class="listing-body">
+            <div class="listing-meta-row">
+              <span>{{ listing.get_category_display }}</span>
+              {% if listing.location %}
+                <span class="dot-sep"></span>
+                <span>📍 {{ listing.location }}</span>
+              {% endif %}
+            </div>
+            <h3 class="listing-title">{{ listing.title }}</h3>
+            <div class="listing-price"><span class="ghs">GHS</span>{{ listing.final_estimated_value|floatformat:0 }}</div>
+            <div class="wants-chip">
+              <span class="wc-label">WANTS:</span>
+              <span class="wc-text">{{ listing.want_text|truncatechars:60 }}</span>
+            </div>
+          </div>
+        </a>
+        <div style="padding:0 14px 14px; display:flex; gap:8px;">
+          <a href="{% url 'listing_detail' listing.pk %}" class="btn btn-primary btn-sm" style="flex:1; justify-content:center;">View</a>
+          <form method="post" action="{% url 'listing_save_toggle' listing.pk %}" style="flex:1;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary btn-sm" style="width:100%; justify-content:center;">Remove</button>
+          </form>
+        </div>
+      </article>
+      {% endwith %}
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty">
+    <div class="empty-icon">🔖</div>
+    <div class="empty-title">Nothing saved yet</div>
+    <div class="empty-sub">Tap the bookmark on any listing to save it here for later.</div>
+    <a href="{% url 'home' %}" class="btn btn-primary" style="margin-top:4px;">Browse Listings</a>
+  </div>
+{% endif %}
+{% endblock %}

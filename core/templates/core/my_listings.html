@@ -1,0 +1,93 @@
+{% extends "core/base.html" %}
+
+{% block title %}My Listings – Sesika{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">My Listings</h1>
+    <p class="page-subtitle">Manage the items you've listed for trade.</p>
+  </div>
+  <a href="{% url 'listing_create' %}" class="btn btn-primary">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5V19"/><path d="M5 12H19"/></svg>
+    New Listing
+  </a>
+</div>
+
+{% if listings %}
+  <div class="mylist-grid">
+    {% for listing in listings %}
+      <article class="mylist-card">
+        <a href="{% url 'listing_detail' listing.pk %}" class="mylist-thumb">
+          {% if listing.image %}
+            <img src="{{ listing.image.url }}" alt="{{ listing.title }}" loading="lazy" />
+          {% else %}
+            <span style="font-size:1.8rem; opacity:0.35;">📦</span>
+          {% endif %}
+          <span class="condition-badge {{ listing.condition }}">{{ listing.get_condition_display }}</span>
+          <span class="status-overlay status-{{ listing.status }}">
+            {% if listing.status == 'active' %}<span class="status-dot"></span> Live
+            {% elif listing.status == 'pending_review' %}In Review
+            {% elif listing.status == 'rejected' %}Rejected
+            {% else %}{{ listing.get_status_display }}{% endif %}
+          </span>
+        </a>
+        <div class="mylist-body">
+          <a href="{% url 'listing_detail' listing.pk %}" class="listing-title" style="text-decoration:none;">
+            {{ listing.title }}
+          </a>
+          <div class="listing-price" style="font-size:15px;">
+            <span class="ghs">GHS</span>{{ listing.final_estimated_value|floatformat:0 }}
+          </div>
+          {% if listing.status == 'pending_review' %}
+            <p style="font-size:0.78rem; color:#92400e; margin:0;">⏳ Under review — visible to you only until approved.</p>
+          {% elif listing.status == 'rejected' %}
+            <p style="font-size:0.78rem; color:var(--danger); margin:0;">❌ Rejected{% if listing.rejection_reason %}: {{ listing.rejection_reason }}{% endif %}</p>
+          {% endif %}
+          <div class="mylist-stats">
+            <div class="ml-stat {% if listing.offer_count > 0 %}highlight{% endif %}">
+              <span><strong>{{ listing.offer_count }}</strong> offer{{ listing.offer_count|pluralize }}</span>
+            </div>
+            <div class="ml-stat dim">
+              <span>{{ listing.created_at|date:"d M Y" }}</span>
+            </div>
+          </div>
+          {% if listing.offer_count > 0 %}
+            {% with top=listing.offers.first %}
+              {% if top %}
+                <div class="mylist-top-offer">
+                  <div class="label-up">Top offer</div>
+                  <div class="top-offer-text">
+                    {% if top.offered_item_description %}{{ top.offered_item_description|truncatechars:60 }}{% endif %}
+                    {% if top.cash_topup %} + GHS {{ top.cash_topup|floatformat:0 }} top-up{% endif %}
+                  </div>
+                </div>
+              {% endif %}
+            {% endwith %}
+          {% endif %}
+          <div class="mylist-actions">
+            <a href="{% url 'listing_edit' listing.pk %}" class="btn btn-ghost btn-sm">Edit</a>
+            {% if listing.offer_count > 0 %}
+              <a href="{% url 'listing_detail' listing.pk %}" class="btn btn-primary btn-sm">
+                View {{ listing.offer_count }} offer{{ listing.offer_count|pluralize }}
+              </a>
+            {% endif %}
+            <form method="post" action="{% url 'listing_delete' listing.pk %}"
+                  onsubmit="return confirm('Delete this listing? This cannot be undone.');" style="display:inline;">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--danger);">Delete</button>
+            </form>
+          </div>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty">
+    <div class="empty-icon">📦</div>
+    <div class="empty-title">No listings yet</div>
+    <div class="empty-sub">Start by listing something you want to trade.</div>
+    <a href="{% url 'listing_create' %}" class="btn btn-primary" style="margin-top:4px;">List an Item</a>
+  </div>
+{% endif %}
+{% endblock %}

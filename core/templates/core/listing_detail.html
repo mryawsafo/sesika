@@ -1,0 +1,188 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ listing.title }} – Sesika{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:16px;">
+  <a href="{% url 'home' %}" class="btn btn-secondary btn-sm">← Back to marketplace</a>
+</div>
+
+<div class="detail-layout">
+
+  <!-- Left: main detail -->
+  <div class="detail-main">
+    <div class="detail-image">
+      {% if listing.image %}
+        <img src="{{ listing.image.url }}" alt="{{ listing.title }}" />
+      {% else %}
+        <span>📦</span>
+      {% endif %}
+    </div>
+
+    <h1 class="detail-title">{{ listing.title }}</h1>
+
+    <div class="meta-row">
+      <span class="meta-chip">{{ listing.get_condition_display }}</span>
+      <span class="meta-chip">{{ listing.get_category_display }}{% if listing.subcategory %} › {{ listing.get_subcategory_display }}{% endif %}</span>
+      {% if listing.location %}<span class="meta-chip">📍 {{ listing.location }}</span>{% endif %}
+      <span style="color:var(--text-3);">· {{ listing.created_at|date:"d M Y" }}</span>
+      <span class="badge badge-{{ listing.status }}">{{ listing.get_status_display }}</span>
+    </div>
+
+    <div class="wants-box">
+      <div class="label-up" style="color:var(--gold-deep);">🔄 Seller is looking for</div>
+      <div class="wants-text">{{ listing.want_text }}</div>
+    </div>
+
+    <div class="detail-section">
+      <div class="label-up" style="margin-bottom:8px;">Description</div>
+      <div class="description">{{ listing.description }}</div>
+    </div>
+
+    <!-- Offers (owner only) -->
+    {% if is_owner %}
+      <div class="detail-section" style="margin-top:0;">
+        <div class="section-title">📬 Offers Received ({{ listing.offer_count }})</div>
+        {% for offer in listing.offers.all %}
+          <div style="border-top:1px solid var(--border-soft); padding:12px 0; margin-top:8px;">
+            <div class="flex-row" style="margin-bottom:4px;">
+              <strong style="font-size:0.9rem;">From: {{ offer.from_user.name|default:offer.from_user.phone }}</strong>
+              <span class="badge badge-{{ offer.status }}">{{ offer.get_status_display }}</span>
+            </div>
+            {% if offer.offered_item_description %}
+              <p style="font-size:0.85rem; color:var(--text-2); margin-bottom:4px;">
+                Offering: {{ offer.offered_item_description }}
+              </p>
+            {% endif %}
+            <p style="font-size:0.85rem; color:var(--text-2);">
+              Cash top-up: <strong style="color:var(--text);">GHS {{ offer.cash_topup }}</strong>
+            </p>
+            {% if offer.message %}
+              <p style="font-size:0.82rem; color:var(--text-3); margin-top:4px; font-style:italic;">"{{ offer.message }}"</p>
+            {% endif %}
+            {% if offer.contact_revealed %}
+              <span class="badge badge-active" style="margin-top:6px; display:inline-block;">Contact Revealed</span>
+            {% endif %}
+          </div>
+        {% empty %}
+          <p class="text-muted" style="margin-top:8px;">No offers yet.</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Right: sidebar -->
+  <aside class="sidebar">
+
+    <!-- Value card -->
+    <div class="side-card value-card">
+      <div class="label-up">Estimated trade value</div>
+      <div class="big-price"><span class="ghs">GHS</span>{{ listing.final_estimated_value|floatformat:0 }}</div>
+      <div class="compare">
+        Your estimate: <strong>GHS {{ listing.user_estimated_value|floatformat:0 }}</strong><br>
+        Market average: <strong>GHS {{ listing.system_estimated_value|floatformat:0 }}</strong>
+        {% if listing.market_price %}
+          <span style="color:var(--text-3);"> · market data</span>
+        {% else %}
+          <span style="color:var(--text-3);"> · category baseline</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Demand signal -->
+    {% if demand_count > 0 %}
+      <div class="side-card demand-card">
+        <div class="demand-icon">👀</div>
+        <div class="demand-text">
+          <strong>{{ demand_count }} {{ demand_count|pluralize:"trader,traders" }}</strong>
+          {{ demand_count|pluralize:"is,are" }} looking for items like this right now.
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- Seller card -->
+    <div class="side-card seller-card">
+      <div class="label-up" style="margin-bottom:10px;">Listed by</div>
+      <div class="seller-row">
+        <div class="seller-avatar">{{ listing.user.name|default:"?"|slice:":2"|upper }}</div>
+        <div>
+          <div class="seller-name">{{ listing.user.name|default:"Anonymous" }}</div>
+          <div class="seller-loc">{{ listing.user.location|default:"Location not set" }}</div>
+        </div>
+      </div>
+      <div class="contact-veil">
+        🔒 Contact revealed after you make an offer
+      </div>
+    </div>
+
+    <!-- Save toggle -->
+    {% if barter_user and not is_owner %}
+      <div class="side-card" style="text-align:center;">
+        <form method="post" action="{% url 'listing_save_toggle' listing.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-secondary btn-block">
+            {% if is_saved %}🔖 Saved — Remove{% else %}🔖 Save Listing{% endif %}
+          </button>
+        </form>
+      </div>
+    {% endif %}
+
+    <!-- Owner manage -->
+    {% if is_owner %}
+      <div class="side-card cta-card">
+        <div class="section-title">Manage Listing</div>
+        <a href="{% url 'listing_edit' listing.pk %}" class="btn btn-secondary btn-block">Edit Listing</a>
+        <form method="post" action="{% url 'listing_delete' listing.pk %}"
+              onsubmit="return confirm('Delete this listing? This cannot be undone.');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger btn-block">Delete Listing</button>
+        </form>
+      </div>
+
+    <!-- Already made an offer -->
+    {% elif user_offer %}
+      <div class="side-card cta-card" style="text-align:center;">
+        <div class="section-title" style="margin-bottom:6px;">✅ You made an offer!</div>
+        <p class="text-muted" style="margin-bottom:12px; font-size:0.85rem;">
+          Contact is revealed. Chat with the seller on WhatsApp.
+        </p>
+        <a href="{{ user_offer.whatsapp_link }}" target="_blank" class="btn btn-whatsapp btn-block">
+          💬 Open WhatsApp
+        </a>
+        <p class="text-muted" style="margin-top:8px; font-size:0.78rem;">
+          Offer status: <strong>{{ user_offer.get_status_display }}</strong>
+        </p>
+      </div>
+
+    <!-- Active listing, logged in -->
+    {% elif listing.status == 'active' %}
+      {% if barter_user %}
+        <div class="side-card cta-card">
+          <div class="section-title" style="margin-bottom:6px;">Make an Offer</div>
+          <p class="text-muted" style="font-size:0.85rem; margin-bottom:12px;">
+            Submit an offer to reveal the seller's WhatsApp contact.
+          </p>
+          <a href="{% url 'offer_create' listing.pk %}" class="btn btn-primary btn-block btn-lg">
+            Make Offer →
+          </a>
+        </div>
+      {% else %}
+        <div class="side-card cta-card" style="text-align:center;">
+          <p class="text-muted" style="margin-bottom:12px; font-size:0.88rem;">
+            Log in to make an offer and reveal the seller's contact.
+          </p>
+          <a href="{% url 'login' %}" class="btn btn-primary btn-block">Login to Make Offer</a>
+        </div>
+      {% endif %}
+
+    <!-- Inactive listing -->
+    {% else %}
+      <div class="side-card" style="text-align:center;">
+        <p class="text-muted" style="margin-bottom:12px;">This listing is no longer active.</p>
+        <a href="{% url 'home' %}" class="btn btn-secondary btn-block">Browse similar items →</a>
+      </div>
+    {% endif %}
+
+  </aside>
+</div>
+{% endblock %}

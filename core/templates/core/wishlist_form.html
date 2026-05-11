@@ -1,0 +1,60 @@
+{% extends "core/base.html" %}
+
+{% block title %}{% if item %}Edit Wishlist Item{% else %}Add to Wishlist{% endif %} – Sesika{% endblock %}
+
+{% block content %}
+<div style="max-width:560px; margin:0 auto;">
+  <div style="margin-bottom:16px;">
+    <a href="{% url 'my_wishlist' %}" class="btn btn-secondary btn-sm">← Back to wishlist</a>
+  </div>
+
+  <h1 class="page-title">{% if item %}Edit wishlist item{% else %}What are you looking for?{% endif %}</h1>
+  <p style="color:var(--text-2); margin-bottom:20px; font-size:0.93rem;">
+    {% if item %}Update the details for this wishlist item.{% else %}Add an item to your wishlist and we'll notify you when a matching listing appears.{% endif %}
+  </p>
+
+  <div class="form-card">
+    <form method="post" action="{% if item %}{% url 'wishlist_edit' item.pk %}{% else %}{% url 'wishlist_create' %}{% endif %}" novalidate>
+      {% csrf_token %}
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.title.id_for_label }}">
+          Item name <span class="req">*</span>
+        </label>
+        {{ form.title }}
+        {% if form.title.errors %}
+          <ul class="errorlist">{% for e in form.title.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.category.id_for_label }}">Category (optional)</label>
+        {{ form.category }}
+        {% if form.category.errors %}
+          <ul class="errorlist">{% for e in form.category.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.description.id_for_label }}">Details (optional)</label>
+        {{ form.description }}
+        <div class="form-hint">Condition, brand, size — the more specific, the better the match.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.max_budget.id_for_label }}">Max budget (GHS)</label>
+        {{ form.max_budget }}
+        <div class="form-hint">Leave blank if you have no budget limit.</div>
+      </div>
+
+      <div class="form-actions">
+        <a href="{% url 'my_wishlist' %}" class="btn btn-secondary">Cancel</a>
+        <button type="submit" class="btn btn-primary btn-lg">
+          {% if item %}Save Changes{% else %}Add to Wishlist{% endif %}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5L16 12L9 19"/></svg>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

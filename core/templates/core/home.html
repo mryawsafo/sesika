@@ -1,0 +1,95 @@
+{% extends "core/base.html" %}
+
+{% block title %}Sesika – Trade Anything{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Find It. Swap It. 🇬🇭</h1>
+    <p class="page-subtitle">Trade items directly. Add cash when needed.</p>
+  </div>
+  {% if barter_user %}
+    <a href="{% url 'listing_create' %}" class="btn btn-primary">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5V19"/><path d="M5 12H19"/></svg>
+      List an Item
+    </a>
+  {% else %}
+    <a href="{% url 'login' %}" class="btn btn-primary">Join to Start Trading</a>
+  {% endif %}
+</div>
+
+<!-- Category filter pills -->
+<div class="pills-row">
+  <a href="{% url 'home' %}" class="pill {% if not selected_category %}active{% endif %}">All</a>
+  {% for value, label in category_choices %}
+    <a href="?category={{ value }}" class="pill {% if selected_category == value %}active{% endif %}">{{ label }}</a>
+  {% endfor %}
+</div>
+{% if selected_category %}
+  <p style="font-size:0.82rem; color:var(--text-2); margin-bottom:12px;">
+    Showing <strong>{{ listings.count }}</strong> listing{{ listings.count|pluralize }} in this category.
+    <a href="{% url 'home' %}" style="color:var(--green);">Clear filter</a>
+  </p>
+{% endif %}
+
+<!-- Listings grid -->
+{% if listings %}
+  <div class="listing-grid">
+    {% for listing in listings %}
+      <article class="listing-card" style="position:relative;">
+        <a href="{% url 'listing_detail' listing.pk %}" style="display:contents;">
+          <div class="listing-thumb">
+            {% if listing.image %}
+              <img src="{{ listing.image.url }}" alt="{{ listing.title }}" loading="lazy" />
+            {% else %}
+              <span style="font-size:1.5rem; opacity:0.4;">📦</span>
+            {% endif %}
+            <span class="condition-badge {{ listing.condition }}">{{ listing.get_condition_display }}</span>
+          </div>
+          <div class="listing-body">
+            <div class="listing-meta-row">
+              <span>{{ listing.get_category_display }}</span>
+              {% if listing.location %}
+                <span class="dot-sep"></span>
+                <span>📍 {{ listing.location }}</span>
+              {% endif %}
+            </div>
+            <h3 class="listing-title">{{ listing.title }}</h3>
+            <div class="listing-price"><span class="ghs">GHS</span>{{ listing.final_estimated_value|floatformat:0 }}</div>
+            <div class="wants-chip">
+              <span class="wc-label">WANTS:</span>
+              <span class="wc-text">{{ listing.want_text|truncatechars:60 }}</span>
+            </div>
+          </div>
+        </a>
+        {% if barter_user %}
+          <form method="post" action="{% url 'listing_save_toggle' listing.pk %}" style="position:absolute; top:8px; right:8px; z-index:1; margin:0;">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="save-btn {% if listing.pk in saved_pks %}saved{% endif %}" aria-label="{% if listing.pk in saved_pks %}Remove from saved{% else %}Save listing{% endif %}">
+              {% if listing.pk in saved_pks %}
+                <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 4 H18 V21 L12 17 L6 21 Z"/></svg>
+              {% else %}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M6 4 H18 V21 L12 17 L6 21 Z"/></svg>
+              {% endif %}
+            </button>
+          </form>
+        {% endif %}
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty">
+    <div class="empty-icon">📦</div>
+    <div class="empty-title">No listings yet</div>
+    <div class="empty-sub">
+      {% if selected_category %}
+        Nothing in this category yet — be the first to list something here.
+      {% else %}
+        Be the first to list something and start the market.
+      {% endif %}
+    </div>
+    <a href="{% url 'listing_create' %}" class="btn btn-primary" style="margin-top:4px;">List an Item</a>
+  </div>
+{% endif %}
+{% endblock %}

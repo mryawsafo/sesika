@@ -1,0 +1,67 @@
+{% extends "core/base.html" %}
+
+{% block title %}Offer Submitted – Sesika{% endblock %}
+
+{% block content %}
+<div style="max-width:560px; margin:0 auto; text-align:center;">
+
+  <div class="side-card" style="margin-bottom:16px; padding:32px 24px;">
+    <div style="font-size:3rem; margin-bottom:12px;">🎉</div>
+    <h1 style="font-size:1.45rem; font-weight:800; margin-bottom:8px; color:var(--text);">Offer Submitted!</h1>
+    <p style="color:var(--text-2); margin-bottom:0; font-size:0.93rem; line-height:1.5;">
+      Your offer on <strong style="color:var(--text);">{{ offer.listing.title }}</strong> is in.
+      The seller's WhatsApp contact is now unlocked.
+    </p>
+  </div>
+
+  <!-- Offer summary -->
+  <div class="side-card" style="text-align:left; margin-bottom:16px;">
+    <div class="label-up" style="margin-bottom:10px;">Your offer summary</div>
+    {% if offer.offered_item_description %}
+      <div style="font-size:0.88rem; margin-bottom:6px;">
+        <strong>Item offered:</strong> {{ offer.offered_item_description }}
+      </div>
+    {% endif %}
+    <div style="font-size:0.88rem; margin-bottom:6px;">
+      <strong>Cash top-up:</strong> GHS {{ offer.cash_topup|floatformat:2 }}
+    </div>
+    <div style="font-size:0.88rem; margin-bottom:6px;">
+      <strong>Listing estimated at:</strong> GHS {{ offer.listing.final_estimated_value|floatformat:0 }}
+    </div>
+    {% if offer.suggested_cash_topup_min and offer.suggested_cash_topup_min > 0 %}
+      <div style="background:var(--gold-soft); border:1px solid var(--gold); border-radius:10px; padding:10px 12px; margin-top:10px; font-size:0.83rem; color:#5b3c08; text-align:left;">
+        <strong>💡 Suggested top-up: GHS {{ offer.suggested_cash_topup_min|floatformat:0 }} – GHS {{ offer.suggested_cash_topup_max|floatformat:0 }}</strong><br>
+        Mentioning a willingness to add this when you message the seller could improve your chances.
+      </div>
+    {% elif offer.suggested_cash_topup_min is not None %}
+      <div style="background:#d1fae5; border:1px solid #6ee7b7; border-radius:10px; padding:10px 12px; margin-top:10px; font-size:0.83rem; color:#065f46; text-align:left;">
+        <strong>✅ Strong offer</strong> — your offer matches or exceeds the listing's estimated value.
+      </div>
+    {% endif %}
+    {% if offer.message %}
+      <div style="font-size:0.88rem; margin-top:8px;">
+        <strong>Message:</strong> {{ offer.message }}
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- WhatsApp CTA -->
+  <div class="side-card" style="background:#d1fae5; border:1px solid #6ee7b7; margin-bottom:20px;">
+    <p style="font-size:0.93rem; color:#065f46; margin-bottom:12px; font-weight:700;">
+      📲 Contact the seller on WhatsApp
+    </p>
+    <a href="{{ whatsapp_link }}" target="_blank" class="btn btn-whatsapp btn-block btn-lg">
+      💬 Open WhatsApp Chat
+    </a>
+    <p style="font-size:0.78rem; color:#065f46; margin-top:8px;">
+      A message is pre-filled so they know you made an offer.
+    </p>
+  </div>
+
+  <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
+    <a href="{% url 'listing_detail' offer.listing.pk %}" class="btn btn-secondary">Back to Listing</a>
+    <a href="{% url 'home' %}" class="btn btn-secondary">Browse More</a>
+    <a href="{% url 'my_offers' %}" class="btn btn-secondary">My Offers</a>
+  </div>
+</div>
+{% endblock %}

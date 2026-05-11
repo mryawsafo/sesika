@@ -1,0 +1,46 @@
+{% extends "core/base.html" %}
+{% block title %}Notifications – Sesika{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Notifications</h1>
+    <p class="page-subtitle">Updates on your offers, wishlist matches and trade opportunities.</p>
+  </div>
+</div>
+
+{% if notifications %}
+  <div class="notif-list">
+    {% for notif in notifications %}
+      <a href="{% url 'notification_click' notif.pk %}"
+         class="notif-row {% if not notif.is_read %}unread{% endif %}">
+        <div class="notif-icon {% if notif.type == 'wishlist_match' %}match{% elif notif.type == 'offer_accepted' %}accept{% elif notif.type == 'offer_rejected' %}reject{% elif notif.type == 'seller_demand' %}demand{% elif notif.type == 'trade_opportunity' %}opp{% endif %}">
+          {% if notif.type == 'wishlist_match' %}🔔
+          {% elif notif.type == 'offer_accepted' %}✅
+          {% elif notif.type == 'offer_rejected' %}❌
+          {% elif notif.type == 'seller_demand' %}🔥
+          {% elif notif.type == 'trade_opportunity' %}🔄
+          {% endif %}
+        </div>
+        <div class="notif-body">
+          <div class="notif-msg">{{ notif.message }}</div>
+          <div class="notif-time">{{ notif.created_at|date:"d M Y, H:i" }}</div>
+        </div>
+        {% if notif.clicked_at %}
+          <span class="notif-pill seen">Seen</span>
+        {% elif not notif.is_read %}
+          <span class="notif-pill new">New</span>
+        {% endif %}
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty">
+    <div class="empty-icon">🔔</div>
+    <div class="empty-title">Nothing yet</div>
+    <div class="empty-sub">
+      You'll hear from us when listings match your wishlist or when your offers get a response.
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

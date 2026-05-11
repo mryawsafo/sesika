@@ -1,0 +1,109 @@
+{% extends "core/base.html" %}
+
+{% block title %}Verify Your Number – Sesika{% endblock %}
+
+{% block content %}
+<div class="auth-shell">
+  <div class="auth-card">
+    <h1 class="auth-title">Verify your number</h1>
+    <div class="phone-display">
+      <span class="phone-display-num">{{ user.phone }}</span>
+      <a href="{% url 'login' %}" class="link-btn">Change number</a>
+    </div>
+
+    {% if error %}
+      <div style="background:#fce5e2; border:1px solid #fca5a5; border-radius:10px; padding:12px 14px; margin-bottom:14px; font-size:0.88rem; color:var(--danger);">
+        {{ error }}
+      </div>
+    {% endif %}
+
+    {% if whatsapp_url %}
+      <!-- State 2: code generated, awaiting WhatsApp send -->
+      <ol class="step-list">
+        <li class="step done">
+          <div class="step-marker">✓</div>
+          <div class="step-text"><strong>Code generated</strong> — ready to send.</div>
+          <div class="step-connector done"></div>
+        </li>
+        <li class="step active">
+          <div class="step-marker">2</div>
+          <div class="step-text"><strong>Open WhatsApp</strong> — the message is pre-filled, just tap Send.</div>
+          <div class="step-connector"></div>
+        </li>
+        <li class="step active">
+          <div class="step-marker">3</div>
+          <div class="step-text"><strong>Come back here</strong> and tap "I've sent it" to confirm.</div>
+        </li>
+      </ol>
+
+      {% if pending_message %}
+        <div class="callout-amber">
+          <span style="font-size:16px; line-height:1;">⏳</span>
+          <div><strong>Not verified yet</strong> — did you send the message? Tap below to check again.</div>
+        </div>
+      {% endif %}
+
+      <a href="{{ whatsapp_url }}" target="_blank" class="btn btn-whatsapp btn-block btn-lg" style="margin-bottom:10px;">
+        💬 Open WhatsApp &amp; Send
+      </a>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="check">
+        <button type="submit" class="btn btn-primary btn-block btn-lg">
+          I've sent it — Check Now
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5L16 12L9 19"/></svg>
+        </button>
+      </form>
+
+      <div class="disclosure-static" style="margin-top:16px;">
+        <div class="disclosure-static-title">WhatsApp link not working?</div>
+        <p style="margin:0 0 8px; font-size:13.5px; color:var(--text-2);">Send this exact message from WhatsApp to our platform number:</p>
+        <div class="mono-code">{{ token }}</div>
+        <p style="font-size:12.5px; color:var(--text-3); margin:0;">
+          Platform number: <strong style="color:var(--text);">+233545436388</strong>.
+          We'll detect it within seconds — then tap "Check Now" above. Code expires in 5 minutes.
+        </p>
+      </div>
+
+    {% else %}
+      <!-- State 1: no OTP yet — explain the flow -->
+      <ol class="step-list">
+        <li class="step active">
+          <div class="step-marker">1</div>
+          <div class="step-text">Tap <strong>Get verification code</strong> below.</div>
+          <div class="step-connector"></div>
+        </li>
+        <li class="step pending">
+          <div class="step-marker">2</div>
+          <div class="step-text">We'll open <strong>WhatsApp</strong> with a message ready to send — just tap Send.</div>
+          <div class="step-connector"></div>
+        </li>
+        <li class="step pending">
+          <div class="step-marker">3</div>
+          <div class="step-text">Come back here and confirm. <strong>No code to type.</strong></div>
+        </li>
+      </ol>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="generate">
+        <button type="submit" class="btn btn-primary btn-block btn-lg">
+          Get Verification Code
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5L16 12L9 19"/></svg>
+        </button>
+      </form>
+      <p class="auth-microcopy">Uses your WhatsApp — free, instant, no SMS.</p>
+    {% endif %}
+
+    {% if barter_user and barter_user.is_verified %}
+      <div class="auth-footer">
+        ✅ Your number is already verified.
+        <a href="{% url 'home' %}" style="color:var(--green); font-weight:700;">Go to marketplace →</a>
+      </div>
+    {% else %}
+      <div class="auth-footer">First time? Your account is created automatically.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

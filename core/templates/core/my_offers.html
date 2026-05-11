@@ -1,0 +1,149 @@
+{% extends "core/base.html" %}
+
+{% block title %}My Offers – Sesika{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">My Offers</h1>
+    <p class="page-subtitle">Track offers you've made and received.</p>
+  </div>
+</div>
+
+<div class="tabs-row" style="margin-bottom:20px;">
+  <button class="tab-btn active" onclick="showTab('made', this)">
+    📤 Sent
+    {% if offers_made %}<span class="tab-badge">{{ offers_made|length }}</span>{% endif %}
+  </button>
+  <button class="tab-btn" onclick="showTab('received', this)">
+    📥 Received
+    {% if offers_received %}<span class="tab-badge">{{ offers_received|length }}</span>{% endif %}
+  </button>
+</div>
+
+<!-- Offers I made -->
+<div id="tab-made">
+  {% if offers_made %}
+    <div class="offer-list">
+      {% for offer in offers_made %}
+        <div class="offer-card">
+          <div class="offer-thumb">
+            {% if offer.listing.image %}
+              <img src="{{ offer.listing.image.url }}" alt="{{ offer.listing.title }}" />
+            {% else %}
+              <span>📦</span>
+            {% endif %}
+          </div>
+          <div class="offer-body">
+            <a href="{% url 'listing_detail' offer.listing.pk %}" class="offer-title">
+              {{ offer.listing.title }}
+            </a>
+            <div class="offer-meta">
+              To {{ offer.to_user.name|default:offer.to_user.phone }} · {{ offer.created_at|date:"d M Y" }}
+            </div>
+            {% if offer.offered_item_description %}
+              <div style="font-size:0.83rem; color:var(--text-2); margin-top:2px;">
+                Offering: {{ offer.offered_item_description|truncatechars:80 }}
+              </div>
+            {% endif %}
+            <div style="font-size:0.83rem; margin-top:2px;">
+              Cash top-up: <strong>GHS {{ offer.cash_topup|floatformat:2 }}</strong>
+            </div>
+            {% if offer.message %}
+              <div style="font-size:0.8rem; color:var(--text-3); font-style:italic; margin-top:2px;">"{{ offer.message|truncatechars:80 }}"</div>
+            {% endif %}
+          </div>
+          <div class="offer-actions">
+            <span class="badge badge-{{ offer.status }}">{{ offer.get_status_display }}</span>
+            {% if offer.contact_revealed %}
+              <a href="{{ offer.whatsapp_link }}" target="_blank" class="btn btn-whatsapp btn-sm">💬 WhatsApp</a>
+            {% else %}
+              <a href="{% url 'offer_success' offer.pk %}" class="btn btn-secondary btn-sm">Unlock Contact</a>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">
+      <div class="empty-icon">📤</div>
+      <div class="empty-title">No offers sent yet</div>
+      <div class="empty-sub">Browse listings and make your first offer.</div>
+      <a href="{% url 'home' %}" class="btn btn-primary" style="margin-top:4px;">Browse marketplace</a>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Offers I received -->
+<div id="tab-received" style="display:none;">
+  {% if offers_received %}
+    <div class="offer-list">
+      {% for offer in offers_received %}
+        <div class="offer-card">
+          <div class="offer-thumb">
+            {% if offer.listing.image %}
+              <img src="{{ offer.listing.image.url }}" alt="{{ offer.listing.title }}" />
+            {% else %}
+              <span>📦</span>
+            {% endif %}
+          </div>
+          <div class="offer-body">
+            <a href="{% url 'listing_detail' offer.listing.pk %}" class="offer-title">
+              {{ offer.listing.title }}
+            </a>
+            <div class="offer-meta">
+              From <strong>{{ offer.from_user.name|default:offer.from_user.phone }}</strong> · {{ offer.created_at|date:"d M Y" }}
+            </div>
+            {% if offer.offered_item_description %}
+              <div style="font-size:0.83rem; color:var(--text-2); margin-top:2px;">
+                Offering: {{ offer.offered_item_description|truncatechars:80 }}
+              </div>
+            {% endif %}
+            <div style="font-size:0.83rem; margin-top:2px;">
+              Cash top-up: <strong>GHS {{ offer.cash_topup|floatformat:2 }}</strong>
+            </div>
+            {% if offer.message %}
+              <div style="font-size:0.8rem; color:var(--text-3); font-style:italic; margin-top:2px;">"{{ offer.message|truncatechars:80 }}"</div>
+            {% endif %}
+          </div>
+          <div class="offer-actions">
+            <span class="badge badge-{{ offer.status }}">{{ offer.get_status_display }}</span>
+            {% if offer.status == 'pending' %}
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <form method="post" action="{% url 'offer_update_status' offer.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="accept">
+                  <button type="submit" class="btn btn-primary btn-sm">Accept</button>
+                </form>
+                <form method="post" action="{% url 'offer_update_status' offer.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="reject">
+                  <button type="submit" class="btn btn-danger btn-sm">Reject</button>
+                </form>
+              </div>
+            {% elif offer.status == 'accepted' and offer.contact_revealed %}
+              <a href="{{ offer.whatsapp_link }}" target="_blank" class="btn btn-whatsapp btn-sm">💬 WhatsApp Buyer</a>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">
+      <div class="empty-icon">📥</div>
+      <div class="empty-title">No offers received yet</div>
+      <div class="empty-sub">When someone offers on your listings, they'll appear here.</div>
+      <a href="{% url 'my_listings' %}" class="btn btn-secondary" style="margin-top:4px;">My listings →</a>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+function showTab(tab, btn) {
+  document.getElementById('tab-made').style.display     = tab === 'made'     ? '' : 'none';
+  document.getElementById('tab-received').style.display = tab === 'received' ? '' : 'none';
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+}
+</script>
+{% endblock %}

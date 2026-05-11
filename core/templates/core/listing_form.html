@@ -1,0 +1,189 @@
+{% extends "core/base.html" %}
+{% block title %}{{ action }} Listing – Sesika{% endblock %}
+
+{% block content %}
+<div style="max-width:640px; margin:0 auto;">
+  <div style="margin-bottom:16px;">
+    {% if listing %}
+      <a href="{% url 'listing_detail' listing.pk %}" class="btn btn-secondary btn-sm">← Back to listing</a>
+    {% else %}
+      <a href="{% url 'home' %}" class="btn btn-secondary btn-sm">← Back to marketplace</a>
+    {% endif %}
+  </div>
+
+  <h1 class="page-title">{{ action }} Listing</h1>
+
+  <div class="form-card">
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+
+      <!-- Title -->
+      <div class="form-group">
+        <label class="form-label" for="{{ form.title.id_for_label }}">
+          Item title <span class="req">*</span>
+        </label>
+        {{ form.title }}
+        {% if form.title.errors %}
+          <ul class="errorlist">{% for e in form.title.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <!-- Category -->
+      <div class="form-group" style="margin-bottom:8px;">
+        <label class="form-label" for="{{ form.category.id_for_label }}">
+          Category <span class="req">*</span>
+        </label>
+        {{ form.category }}
+        {% if form.category.errors %}
+          <ul class="errorlist">{% for e in form.category.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <!-- Subcategory — revealed when category has subcategories -->
+      <div id="subcategory-group" class="subcategory-wrap" style="display:none; margin-bottom:1rem;">
+        <label class="form-label" for="{{ form.subcategory.id_for_label }}" id="subcategory-label"
+               style="font-size:0.83rem; color:var(--text-2);">Subcategory</label>
+        {{ form.subcategory }}
+        {% if form.subcategory.errors %}
+          <ul class="errorlist">{% for e in form.subcategory.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <!-- Condition -->
+      <div class="form-group">
+        <label class="form-label" for="{{ form.condition.id_for_label }}">
+          Condition <span class="req">*</span>
+        </label>
+        {{ form.condition }}
+        {% if form.condition.errors %}
+          <ul class="errorlist">{% for e in form.condition.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <!-- Description -->
+      <div class="form-group">
+        <label class="form-label" for="{{ form.description.id_for_label }}">
+          Description <span class="req">*</span>
+        </label>
+        {{ form.description }}
+        {% if form.description.errors %}
+          <ul class="errorlist">{% for e in form.description.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <!-- Value + Location (2-col) -->
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.user_estimated_value.id_for_label }}">
+            Your estimated value (GHS) <span class="req">*</span>
+          </label>
+          {{ form.user_estimated_value }}
+          <div class="form-hint">We'll cross-check this with current market prices.</div>
+          {% if form.user_estimated_value.errors %}
+            <ul class="errorlist">{% for e in form.user_estimated_value.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+          {% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.location.id_for_label }}">Location</label>
+          {{ form.location }}
+          {% if form.location.errors %}
+            <ul class="errorlist">{% for e in form.location.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Want text -->
+      <div class="form-group">
+        <label class="form-label" for="{{ form.want_text.id_for_label }}">
+          What do you want in exchange? <span class="req">*</span>
+        </label>
+        {{ form.want_text }}
+        <div class="form-hint">{{ form.want_text.help_text }}</div>
+        {% if form.want_text.errors %}
+          <ul class="errorlist">{% for e in form.want_text.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <!-- Photo -->
+      <div class="form-group">
+        <label class="form-label" for="{{ form.image.id_for_label }}">Photo</label>
+        {% if listing and listing.image %}
+          <div style="margin-bottom:10px;">
+            <img src="{{ listing.image.url }}" alt="Current photo"
+                 style="max-height:140px; border-radius:10px; object-fit:cover; border:1px solid var(--border-soft);" />
+            <div class="form-hint" style="margin-top:4px;">Upload a new image to replace this one.</div>
+          </div>
+        {% endif %}
+        <div class="photo-uploader" onclick="document.getElementById('{{ form.image.id_for_label }}').click()">
+          <div style="font-size:1.5rem; margin-bottom:6px;">📷</div>
+          <div style="font-size:0.88rem; color:var(--text-2);">Tap to upload a photo</div>
+          <div style="font-size:0.78rem; color:var(--text-3); margin-top:2px;">JPG, PNG · max 5 MB</div>
+        </div>
+        <div style="display:none;">{{ form.image }}</div>
+        {% if form.image.errors %}
+          <ul class="errorlist">{% for e in form.image.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <div class="form-actions">
+        {% if listing %}
+          <a href="{% url 'listing_detail' listing.pk %}" class="btn btn-secondary">Cancel</a>
+        {% else %}
+          <a href="{% url 'home' %}" class="btn btn-secondary">Cancel</a>
+        {% endif %}
+        <button type="submit" class="btn btn-primary btn-lg">
+          {{ action }} Listing
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5L16 12L9 19"/></svg>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  const choices = {{ subcategory_choices_json|safe }};
+  const catEl   = document.getElementById('id_category');
+  const subEl   = document.getElementById('id_subcategory');
+  const subGroup = document.getElementById('subcategory-group');
+  const subLabel = document.getElementById('subcategory-label');
+
+  // Capture any pre-selected subcategory (edit mode) before we rebuild the options
+  const initialSub = subEl.value;
+
+  const catLabels = {};
+  Array.from(catEl.options).forEach(function(o) { catLabels[o.value] = o.text; });
+
+  function refresh(preserveValue) {
+    const subs = choices[catEl.value] || [];
+
+    subEl.innerHTML = '<option value="">— Select subcategory —</option>';
+    subs.forEach(function(pair) {
+      const opt = document.createElement('option');
+      opt.value = pair[0];
+      opt.textContent = pair[1];
+      if (pair[0] === preserveValue) opt.selected = true;
+      subEl.appendChild(opt);
+    });
+
+    if (subs.length > 0) {
+      const catName = catLabels[catEl.value] || 'Category';
+      subLabel.textContent = catName + ' › Subcategory';
+      subGroup.style.display = 'block';
+    } else {
+      subGroup.style.display = 'none';
+    }
+  }
+
+  catEl.addEventListener('change', function() {
+    refresh('');  // clear subcategory when category changes
+  });
+
+  // On load: if a category is already selected (edit mode or validation error re-render),
+  // show the subcategory row and restore the selected value
+  if (catEl.value) {
+    refresh(initialSub);
+  }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,128 @@
+{% extends "core/base.html" %}
+
+{% block title %}Make an Offer – Sesika{% endblock %}
+
+{% block content %}
+<div style="max-width:640px; margin:0 auto;">
+  <div style="margin-bottom:16px;">
+    <a href="{% url 'listing_detail' listing.pk %}" class="btn btn-secondary btn-sm">← Back to listing</a>
+  </div>
+
+  <h1 class="page-title" style="margin-bottom:4px;">Make an Offer</h1>
+  <p style="color:var(--text-2); margin-bottom:20px; font-size:0.93rem;">
+    for <strong style="color:var(--text);">{{ listing.title }}</strong>
+  </p>
+
+  <!-- Listing summary card -->
+  <div class="side-card" style="display:flex; gap:14px; align-items:flex-start; margin-bottom:16px;">
+    {% if listing.image %}
+      <img src="{{ listing.image.url }}" alt="{{ listing.title }}"
+           style="width:72px; height:72px; object-fit:cover; border-radius:10px; flex-shrink:0; border:1px solid var(--border-soft);" />
+    {% else %}
+      <div style="width:72px; height:72px; background:var(--cream-alt); border-radius:10px; display:flex;
+                  align-items:center; justify-content:center; font-size:1.4rem; flex-shrink:0;">📦</div>
+    {% endif %}
+    <div>
+      <div style="font-weight:700; font-size:0.96rem; margin-bottom:2px;">{{ listing.title }}</div>
+      <div style="color:var(--text-2); font-size:0.84rem;">Est. value: <strong style="color:var(--text);">GHS {{ target_value|floatformat:0 }}</strong></div>
+      <div style="font-size:0.82rem; color:var(--text-3); margin-top:4px;">Wants: {{ listing.want_text|truncatechars:100 }}</div>
+    </div>
+  </div>
+
+  <!-- Suggestion banner -->
+  <div class="suggestion-card" id="suggest-box">
+    💡 Suggested cash top-up:
+    <strong id="suggest-range">GHS {{ suggested_min|floatformat:0 }} – GHS {{ suggested_max|floatformat:0 }}</strong>
+    <span style="color:#7c5c10; font-size:0.8rem; display:block; margin-top:4px;">
+      Based on listing value vs. your item's value. Updates as you type.
+    </span>
+  </div>
+
+  <div class="form-card">
+    {% if form.non_field_errors %}
+      <div style="background:#fce5e2; border:1px solid #fca5a5; border-radius:10px; padding:12px 14px; margin-bottom:16px; font-size:0.88rem; color:var(--danger);">
+        {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.offered_item_description.id_for_label }}">
+          What are you offering?
+        </label>
+        {{ form.offered_item_description }}
+        <div class="form-hint">Describe the item you want to swap. Leave blank if offering cash only.</div>
+        {% if form.offered_item_description.errors %}
+          <ul class="errorlist">{% for e in form.offered_item_description.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.offered_item_value.id_for_label }}">
+          Your item's estimated value (GHS)
+        </label>
+        {{ form.offered_item_value }}
+        <div class="form-hint">{{ form.offered_item_value.help_text }}</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.cash_topup.id_for_label }}">
+          Cash top-up (GHS) <span style="font-weight:400; color:var(--text-3);">— optional</span>
+        </label>
+        {{ form.cash_topup }}
+        <div class="form-hint">Enter 0 if you're offering an item with no cash addition.</div>
+        {% if form.cash_topup.errors %}
+          <ul class="errorlist">{% for e in form.cash_topup.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.message.id_for_label }}">Message to seller (optional)</label>
+        {{ form.message }}
+      </div>
+
+      <div class="unlock-note">
+        🔒 Submitting this offer will <strong>reveal the seller's WhatsApp contact</strong> so you can negotiate directly.
+      </div>
+
+      <div class="form-actions">
+        <a href="{% url 'listing_detail' listing.pk %}" class="btn btn-secondary">Cancel</a>
+        <button type="submit" class="btn btn-primary btn-lg">
+          Send Offer &amp; Connect
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5L16 12L9 19"/></svg>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  const listingId = "{{ listing.pk }}";
+  const suggestUrl = "{% url 'offer_suggest' %}";
+  const targetValue = parseFloat("{{ target_value }}");
+
+  const itemValueInput = document.getElementById("id_offered_item_value");
+  const cashTopupInput = document.getElementById("id_cash_topup");
+  const suggestRange   = document.getElementById("suggest-range");
+
+  function updateSuggestion() {
+    const itemVal = parseFloat(itemValueInput.value) || 0;
+    const cashVal = parseFloat(cashTopupInput.value) || 0;
+    const total   = itemVal + cashVal;
+
+    fetch(`${suggestUrl}?listing_id=${listingId}&offered_value=${total}`)
+      .then(r => r.json())
+      .then(data => {
+        const mn = parseFloat(data.suggested_min).toFixed(0);
+        const mx = parseFloat(data.suggested_max).toFixed(0);
+        suggestRange.textContent = `GHS ${mn} – GHS ${mx}`;
+      })
+      .catch(() => {});
+  }
+
+  itemValueInput.addEventListener("input", updateSuggestion);
+  cashTopupInput.addEventListener("input", updateSuggestion);
+</script>
+{% endblock %}
