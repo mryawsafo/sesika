@@ -476,7 +476,7 @@ class BarterUser(models.Model):
     contact_reveal_preference = models.CharField(
         max_length=20,
         choices=CONTACT_REVEAL_CHOICES,
-        default='on_accepted_offer',
+        default='on_any_offer',
     )
     portfolio_url = models.URLField(blank=True, help_text='Link to your portfolio, Instagram, or website.')
     website_url = models.URLField(blank=True, help_text='Optional additional URL.')

@@ -1005,7 +1005,7 @@ def admin_seed_listing(request):
 
     from .models import (
         CATEGORY_CHOICES, CONDITION_CHOICES, GHANA_REGION_CHOICES,
-        TRANSACTION_TYPE_CHOICES, LISTING_TYPE_CHOICES,
+        TRANSACTION_TYPE_CHOICES, LISTING_TYPE_CHOICES, CONTACT_REVEAL_CHOICES,
     )
 
     success = None
@@ -1023,19 +1023,25 @@ def admin_seed_listing(request):
         else:
             phone = phone_raw
 
-        name  = request.POST.get('name', '').strip()
-        title = request.POST.get('title', '').strip()
+        name             = request.POST.get('name', '').strip()
+        title            = request.POST.get('title', '').strip()
+        contact_pref     = request.POST.get('contact_reveal_preference', 'on_any_offer')
 
         if not phone or not title:
             error = 'Phone number and title are required.'
         else:
-            user, _ = BarterUser.objects.get_or_create(
+            user, created = BarterUser.objects.get_or_create(
                 phone=phone,
-                defaults={'name': name, 'is_verified': True},
+                defaults={'name': name, 'is_verified': True, 'contact_reveal_preference': contact_pref},
             )
-            if name and not user.name:
-                user.name = name
-                user.save(update_fields=['name'])
+            if not created:
+                update_fields = []
+                if name and not user.name:
+                    user.name = name
+                    update_fields.append('name')
+                user.contact_reveal_preference = contact_pref
+                update_fields.append('contact_reveal_preference')
+                user.save(update_fields=update_fields)
 
             listing = Listing(
                 user=user,
@@ -1078,4 +1084,5 @@ def admin_seed_listing(request):
         'transaction_type_choices': TRANSACTION_TYPE_CHOICES,
         'listing_type_choices': LISTING_TYPE_CHOICES,
         'subcategory_choices_json': json.dumps(SUBCATEGORY_CHOICES),
+        'contact_reveal_choices': CONTACT_REVEAL_CHOICES,
     })

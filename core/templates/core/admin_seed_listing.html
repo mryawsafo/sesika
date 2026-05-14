@@ -49,6 +49,15 @@
           <div class="form-hint">Only applied if the account is new.</div>
         </div>
       </div>
+      <div class="form-group">
+        <label class="form-label">Contact reveal preference</label>
+        <select name="contact_reveal_preference">
+          {% for val, label in contact_reveal_choices %}
+            <option value="{{ val }}" {% if val == 'on_any_offer' %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-hint">Applied (or updated) every time you seed a listing for this number.</div>
+      </div>
 
       <hr style="border:none; border-top:1px solid var(--border-soft); margin:16px 0;">
 
