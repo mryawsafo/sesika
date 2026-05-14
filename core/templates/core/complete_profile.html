@@ -41,7 +41,9 @@
         <label class="form-label" for="id_location_city">
           City / Town <span style="font-weight:400; color:var(--text-3);">— optional</span>
         </label>
-        <input type="text" name="location_city" id="id_location_city" placeholder="e.g. Accra, Kumasi">
+        <select name="location_city" id="id_location_city">
+          <option value="">— Select town —</option>
+        </select>
       </div>
 
       <button type="submit" class="btn btn-primary btn-block btn-lg" style="margin-top:8px;">
@@ -51,4 +53,25 @@
     </form>
   </div>
 </div>
+<script>
+(function() {
+  var TOWNS = {{ towns_json|safe }};
+  var regionEl = document.getElementById('id_location_region');
+  var cityEl   = document.getElementById('id_location_city');
+
+  function refreshTowns() {
+    var towns = TOWNS[regionEl ? regionEl.value : ''] || [];
+    cityEl.innerHTML = '<option value="">— Select town —</option>';
+    towns.forEach(function(t) {
+      var o = document.createElement('option');
+      o.value = t; o.textContent = t;
+      cityEl.appendChild(o);
+    });
+    cityEl.disabled = towns.length === 0;
+  }
+
+  if (regionEl) regionEl.addEventListener('change', refreshTowns);
+  refreshTowns();
+})();
+</script>
 {% endblock %}

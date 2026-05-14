@@ -190,6 +190,81 @@ GHANA_REGION_CHOICES = [
     ('savannah', 'Savannah'),
 ]
 
+GHANA_TOWNS = {
+    'greater_accra': [
+        'Accra', 'Tema', 'Kasoa', 'Madina', 'Adenta', 'Ashaiman', 'Dome',
+        'Achimota', 'Osu', 'Labadi', 'Teshie', 'Nungua', 'Spintex',
+        'East Legon', 'Airport Residential', 'Cantonments', 'Labone',
+        'Roman Ridge', 'Darkuman', 'Dansoman', 'Weija', 'Ablekuma',
+        'Ofankor', 'Pokuase', 'Amasaman', 'Dodowa', 'Prampram', 'Ada', 'Sege',
+        'Lashibi', 'Community 25', 'Ashiaman',
+    ],
+    'ashanti': [
+        'Kumasi', 'Obuasi', 'Mampong', 'Ejisu', 'Konongo', 'Agona',
+        'Bekwai', 'Juaben', 'Asokwa', 'Nhyiaeso', 'Suame',
+        'Asokore Mampong', 'Bantama', 'Adum', 'Kejetia', 'Abuakwa',
+        'Tafo', 'Kwadaso', 'Dichemso', 'Manhyia',
+    ],
+    'western': [
+        'Sekondi', 'Takoradi', 'Tarkwa', 'Prestea', 'Axim', 'Shama',
+        'Agona Nkwanta', 'Bogoso', 'Halfassini', 'Ankobra', 'Nzema',
+    ],
+    'eastern': [
+        'Koforidua', 'Nkawkaw', 'Asamankese', 'Aburi', 'Akosombo',
+        'Oda', 'Akim Oda', 'Nsawam', 'Suhum', 'Donkorkrom', 'Kibi',
+        'Mpraeso', 'Kwahu', 'Begoro',
+    ],
+    'central': [
+        'Cape Coast', 'Winneba', 'Mankessim', 'Swedru', 'Assin Fosu',
+        'Saltpond', 'Anomabo', 'Dunkwa', 'Twifo Praso', 'Agona Swedru',
+        'Elmina', 'Jukwa',
+    ],
+    'northern': [
+        'Tamale', 'Yendi', 'Savelugu', 'Tolon', 'Karaga', 'Gushegu',
+        'Kpandai', 'Zabzugu', 'Tatale', 'Demon',
+    ],
+    'upper_east': [
+        'Bolgatanga', 'Bawku', 'Navrongo', 'Zebilla', 'Sandema',
+        'Bongo', 'Zuarungu', 'Paga', 'Garu', 'Tempane',
+    ],
+    'upper_west': [
+        'Wa', 'Tumu', 'Lawra', 'Nandom', 'Jirapa', 'Gwolu', 'Funsi',
+        'Kaleo', 'Nadowli', 'Hamile',
+    ],
+    'volta': [
+        'Ho', 'Hohoe', 'Keta', 'Sogakope', 'Denu', 'Kpando', 'Aflao',
+        'Akatsi', 'Anloga', 'Adidome', 'Dzodze', 'Peki',
+    ],
+    'oti': [
+        'Dambai', 'Nkwanta', 'Jasikan', 'Kadjebi', 'Kete Krachi',
+        'Buem', 'Likpe', 'Oti Damanko',
+    ],
+    'bono': [
+        'Sunyani', 'Berekum', 'Dormaa Ahenkro', 'Jinijini', 'Wamfie',
+        'Nsoatre', 'Sampa', 'Wenchi',
+    ],
+    'bono_east': [
+        'Techiman', 'Atebubu', 'Kintampo', 'Nkoranza', 'Yeji',
+        'Prang', 'Busunya', 'Nsawkaw',
+    ],
+    'ahafo': [
+        'Goaso', 'Kukuom', 'Bechem', 'Acherensua', 'Duayaw Nkwanta',
+        'Kenyasi', 'Hwidiem',
+    ],
+    'western_north': [
+        'Sefwi Wiawso', 'Bibiani', 'Enchi', 'Juaboso', 'Aowin',
+        'Bia', 'Sefwi Akontombra', 'Bodi',
+    ],
+    'north_east': [
+        'Nalerigu', 'Gambaga', 'Walewale', 'Chereponi', 'Bunkpurugu',
+        'Yunyoo', 'Nakpayili',
+    ],
+    'savannah': [
+        'Damongo', 'Bole', 'Salaga', 'Sawla', 'Tuna', 'Daboya',
+        'Buipe', 'Yapei',
+    ],
+}
+
 TRANSACTION_TYPE_CHOICES = [
     ('trade', 'Trade'),
     ('rental', 'Rental'),

@@ -154,7 +154,7 @@
         </div>
         <div class="form-group">
           <label class="form-label">Region</label>
-          <select name="location_region">
+          <select name="location_region" id="seed-region">
             <option value="">— Select —</option>
             {% for val, label in region_choices %}
               <option value="{{ val }}">{{ label }}</option>
@@ -166,7 +166,9 @@
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">City / Town</label>
-          <input type="text" name="location_city" placeholder="e.g. Accra">
+          <select name="location_city" id="seed-city">
+            <option value="">— Select —</option>
+          </select>
         </div>
         <div class="form-group">
           <label class="form-label">Neighbourhood</label>
@@ -235,6 +237,25 @@
   ltypeEl.addEventListener('change', refreshType);
   refreshSub();
   refreshType();
+
+  // Region → town wiring
+  var TOWNS = {{ towns_json|safe }};
+  var seedRegion = document.getElementById('seed-region');
+  var seedCity   = document.getElementById('seed-city');
+
+  function refreshSeedTowns() {
+    var towns = TOWNS[seedRegion ? seedRegion.value : ''] || [];
+    seedCity.innerHTML = '<option value="">— Select —</option>';
+    towns.forEach(function(t) {
+      var o = document.createElement('option');
+      o.value = t; o.textContent = t;
+      seedCity.appendChild(o);
+    });
+    seedCity.disabled = towns.length === 0;
+  }
+
+  if (seedRegion) seedRegion.addEventListener('change', refreshSeedTowns);
+  refreshSeedTowns();
 })();
 
 function previewSeedPhotos(input) {

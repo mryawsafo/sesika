@@ -23,7 +23,7 @@ from .models import (
     Notification, match_listing_to_wishlists, match_want_text_to_listings,
     count_wishlist_demand, DeviceToken, LoginAttempt, UniversityDomain,
     CampusGroup, CampusMembership, TradeRating, enrich_listing_with_ai,
-    validate_and_correct_listing_category, SiteSettings,
+    validate_and_correct_listing_category, SiteSettings, GHANA_TOWNS,
 )
 from .forms import (
     LoginForm, ListingForm, OfferForm, WishlistItemForm, ProfileForm,
@@ -261,6 +261,7 @@ def complete_profile(request):
         'user': user,
         'error': error,
         'region_choices': GHANA_REGION_CHOICES,
+        'towns_json': json.dumps(GHANA_TOWNS),
     })
 
 
@@ -278,6 +279,7 @@ def update_profile(request):
         'form': form,
         'avg_rating': avg_rating,
         'ratings': TradeRating.objects.filter(rated_user=user).select_related('rater').order_by('-created_at')[:10],
+        'towns_json': json.dumps(GHANA_TOWNS),
     })
 
 
@@ -381,6 +383,7 @@ def home(request):
     category_filter = request.GET.get('category', '')
     transaction_filter = request.GET.get('type', '')
     region_filter = request.GET.get('region', '')
+    city_filter = request.GET.get('city', '')
 
     if category_filter:
         listings = listings.filter(category=category_filter)
@@ -388,6 +391,8 @@ def home(request):
         listings = listings.filter(transaction_type=transaction_filter)
     if region_filter:
         listings = listings.filter(location_region=region_filter)
+    if city_filter:
+        listings = listings.filter(location_city__iexact=city_filter)
 
     current_user = get_current_user(request)
     saved_pks = set()
@@ -402,9 +407,11 @@ def home(request):
         'listings': listings,
         'category_choices': CATEGORY_CHOICES,
         'region_choices': GHANA_REGION_CHOICES,
+        'towns_json': json.dumps(GHANA_TOWNS),
         'selected_category': category_filter,
         'selected_type': transaction_filter,
         'selected_region': region_filter,
+        'selected_city': city_filter,
         'saved_pks': saved_pks,
     })
 
@@ -474,6 +481,7 @@ def listing_create(request):
                 'form': form,
                 'action': 'Create',
                 'subcategory_choices_json': json.dumps(SUBCATEGORY_CHOICES),
+                'towns_json': json.dumps(GHANA_TOWNS),
             })
 
         for i, photo_file in enumerate(photo_files[:3], start=1):
@@ -500,6 +508,7 @@ def listing_create(request):
         'form': form,
         'action': 'Create',
         'subcategory_choices_json': json.dumps(SUBCATEGORY_CHOICES),
+        'towns_json': json.dumps(GHANA_TOWNS),
     })
 
 
@@ -533,6 +542,7 @@ def listing_edit(request, pk):
         'listing': listing,
         'existing_photos': listing.all_photos,
         'subcategory_choices_json': json.dumps(SUBCATEGORY_CHOICES),
+        'towns_json': json.dumps(GHANA_TOWNS),
     })
 
 
@@ -1091,4 +1101,5 @@ def admin_seed_listing(request):
         'listing_type_choices': LISTING_TYPE_CHOICES,
         'subcategory_choices_json': json.dumps(SUBCATEGORY_CHOICES),
         'contact_reveal_choices': CONTACT_REVEAL_CHOICES,
+        'towns_json': json.dumps(GHANA_TOWNS),
     })

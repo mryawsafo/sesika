@@ -26,29 +26,33 @@
   {% endfor %}
 </div>
 
-<!-- Type + region filters -->
+<!-- Type + region + town filters -->
 <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; align-items:center;">
   <div style="display:flex; gap:6px;">
     <a href="?{% if selected_category %}category={{ selected_category }}&{% endif %}{% if selected_region %}region={{ selected_region }}{% endif %}"
        class="btn btn-sm {% if not selected_type %}btn-primary{% else %}btn-secondary{% endif %}" style="font-size:0.82rem; padding:4px 12px;">All types</a>
-    <a href="?{% if selected_category %}category={{ selected_category }}&{% endif %}type=trade{% if selected_region %}&region={{ selected_region }}{% endif %}"
+    <a href="?{% if selected_category %}category={{ selected_category }}&{% endif %}type=trade{% if selected_region %}&region={{ selected_region }}{% endif %}{% if selected_city %}&city={{ selected_city }}{% endif %}"
        class="btn btn-sm {% if selected_type == 'trade' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-size:0.82rem; padding:4px 12px;">🔄 Trades</a>
-    <a href="?{% if selected_category %}category={{ selected_category }}&{% endif %}type=rental{% if selected_region %}&region={{ selected_region }}{% endif %}"
+    <a href="?{% if selected_category %}category={{ selected_category }}&{% endif %}type=rental{% if selected_region %}&region={{ selected_region }}{% endif %}{% if selected_city %}&city={{ selected_city }}{% endif %}"
        class="btn btn-sm {% if selected_type == 'rental' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-size:0.82rem; padding:4px 12px;">🔑 Rentals</a>
   </div>
-  <select onchange="applyRegion(this.value)"
+  <select id="filter-region" onchange="applyRegionFilter(this.value)"
           style="padding:4px 10px; border:1px solid var(--border); border-radius:8px; background:var(--card); font-size:0.82rem; cursor:pointer;">
     <option value="">All regions</option>
     {% for value, label in region_choices %}
       <option value="{{ value }}" {% if selected_region == value %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
-  {% if selected_category or selected_type or selected_region %}
+  <select id="filter-town" onchange="applyTownFilter(this.value)"
+          style="padding:4px 10px; border:1px solid var(--border); border-radius:8px; background:var(--card); font-size:0.82rem; cursor:pointer; display:{% if selected_region %}''{% else %}'none'{% endif %};">
+    <option value="">All towns</option>
+  </select>
+  {% if selected_category or selected_type or selected_region or selected_city %}
     <a href="{% url 'home' %}" style="font-size:0.82rem; color:var(--green);">✕ Clear filters</a>
   {% endif %}
 </div>
 
-{% if selected_category or selected_type or selected_region %}
+{% if selected_category or selected_type or selected_region or selected_city %}
   <p style="font-size:0.82rem; color:var(--text-2); margin-bottom:12px;">
     Showing <strong>{{ listings.count }}</strong> listing{{ listings.count|pluralize }}.
   </p>
@@ -120,7 +124,7 @@
     <div class="empty-icon">📦</div>
     <div class="empty-title">No listings found</div>
     <div class="empty-sub">
-      {% if selected_category or selected_type or selected_region %}
+      {% if selected_category or selected_type or selected_region or selected_city %}
         Nothing matches these filters — try broadening your search.
       {% else %}
         Be the first to list something and start the market.
@@ -133,11 +137,38 @@
 {% endif %}
 
 <script>
-function applyRegion(val) {
+var TOWNS = {{ towns_json|safe }};
+
+function populateTownSelect(regionVal, currentTown) {
+  var sel = document.getElementById('filter-town');
+  var towns = TOWNS[regionVal] || [];
+  sel.innerHTML = '<option value="">All towns</option>';
+  towns.forEach(function(t) {
+    var o = document.createElement('option');
+    o.value = t; o.textContent = t;
+    if (t === currentTown) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.style.display = towns.length ? '' : 'none';
+}
+
+function applyRegionFilter(val) {
   var url = new URL(window.location.href);
-  if (val) { url.searchParams.set('region', val); }
-  else { url.searchParams.delete('region'); }
+  if (val) { url.searchParams.set('region', val); } else { url.searchParams.delete('region'); }
+  url.searchParams.delete('city');
   window.location.href = url.toString();
 }
+
+function applyTownFilter(val) {
+  var url = new URL(window.location.href);
+  if (val) { url.searchParams.set('city', val); } else { url.searchParams.delete('city'); }
+  window.location.href = url.toString();
+}
+
+(function() {
+  var region = '{{ selected_region|escapejs }}';
+  var city   = '{{ selected_city|escapejs }}';
+  if (region) { populateTownSelect(region, city); }
+})();
 </script>
 {% endblock %}

@@ -195,8 +195,10 @@
           {% if form.location_region.errors %}<ul class="errorlist">{% for e in form.location_region.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
         </div>
         <div class="form-group">
-          <label class="form-label" for="{{ form.location_city.id_for_label }}">City / Town</label>
-          {{ form.location_city }}
+          <label class="form-label" for="id_location_city">City / Town</label>
+          <select name="location_city" id="id_location_city">
+            <option value="">— Select town —</option>
+          </select>
         </div>
       </div>
       <div class="form-group">
@@ -359,6 +361,27 @@
   refreshBehaviour();
   refreshWarranty();
   refreshDeposit();
+
+  // Region → town wiring
+  var TOWNS = {{ towns_json|safe }};
+  var regionEl = document.getElementById('id_location_region');
+  var cityEl   = document.getElementById('id_location_city');
+  var currentCity = '{{ form.location_city.value|default:""|escapejs }}';
+
+  function refreshTowns() {
+    var towns = TOWNS[regionEl ? regionEl.value : ''] || [];
+    cityEl.innerHTML = '<option value="">— Select town —</option>';
+    towns.forEach(function(t) {
+      var o = document.createElement('option');
+      o.value = t; o.textContent = t;
+      if (t === currentCity) o.selected = true;
+      cityEl.appendChild(o);
+    });
+    cityEl.disabled = towns.length === 0;
+  }
+
+  if (regionEl) regionEl.addEventListener('change', function() { currentCity = ''; refreshTowns(); });
+  refreshTowns();
 })();
 
 function updatePhotoLabel(input) {
