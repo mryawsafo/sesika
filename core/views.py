@@ -134,6 +134,12 @@ def logout_view(request):
     return redirect('login')
 
 
+def change_number(request):
+    for key in ('barter_user_id', 'otp_whatsapp_url', 'otp_token', 'device_verified'):
+        request.session.pop(key, None)
+    return redirect('login')
+
+
 @login_required_barter
 def request_otp(request):
     user = get_current_user(request)
