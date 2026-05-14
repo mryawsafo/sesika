@@ -1,5 +1,4 @@
 {% extends "core/base.html" %}
-
 {% block title %}Offer Submitted – Sesika{% endblock %}
 
 {% block content %}
@@ -7,56 +6,82 @@
 
   <div class="side-card" style="margin-bottom:16px; padding:32px 24px;">
     <div style="font-size:3rem; margin-bottom:12px;">🎉</div>
-    <h1 style="font-size:1.45rem; font-weight:800; margin-bottom:8px; color:var(--text);">Offer Submitted!</h1>
+    <h1 style="font-size:1.45rem; font-weight:800; margin-bottom:8px; color:var(--text);">
+      {% if offer.offer_type == 'rental' %}Rental Request Sent!{% else %}Offer Submitted!{% endif %}
+    </h1>
     <p style="color:var(--text-2); margin-bottom:0; font-size:0.93rem; line-height:1.5;">
-      Your offer on <strong style="color:var(--text);">{{ offer.listing.title }}</strong> is in.
-      The seller's WhatsApp contact is now unlocked.
+      Your {% if offer.offer_type == 'rental' %}rental request{% else %}offer{% endif %} on
+      <strong style="color:var(--text);">{{ offer.listing.title }}</strong> is in.
+      {% if contact_revealed %}
+        The seller's WhatsApp contact is now unlocked.
+      {% else %}
+        You'll be notified when the seller responds.
+      {% endif %}
     </p>
   </div>
 
   <!-- Offer summary -->
   <div class="side-card" style="text-align:left; margin-bottom:16px;">
-    <div class="label-up" style="margin-bottom:10px;">Your offer summary</div>
-    {% if offer.offered_item_description %}
+    <div class="label-up" style="margin-bottom:10px;">Your {% if offer.offer_type == 'rental' %}request{% else %}offer{% endif %} summary</div>
+    {% if offer.offer_type == 'rental' %}
+      {% if offer.rental_start_date %}
+        <div style="font-size:0.88rem; margin-bottom:6px;">
+          <strong>Rental period:</strong> {{ offer.rental_start_date }} → {{ offer.rental_end_date }}
+        </div>
+      {% endif %}
+      {% if offer.rental_payment_offered %}
+        <div style="font-size:0.88rem; margin-bottom:6px;">
+          <strong>Payment offered:</strong> {{ offer.rental_payment_offered }}
+        </div>
+      {% endif %}
+    {% else %}
+      {% if offer.offered_item_description %}
+        <div style="font-size:0.88rem; margin-bottom:6px;">
+          <strong>Item offered:</strong> {{ offer.offered_item_description }}
+        </div>
+      {% endif %}
       <div style="font-size:0.88rem; margin-bottom:6px;">
-        <strong>Item offered:</strong> {{ offer.offered_item_description }}
+        <strong>Cash top-up:</strong> GHS {{ offer.cash_topup|floatformat:2 }}
       </div>
     {% endif %}
-    <div style="font-size:0.88rem; margin-bottom:6px;">
-      <strong>Cash top-up:</strong> GHS {{ offer.cash_topup|floatformat:2 }}
-    </div>
     <div style="font-size:0.88rem; margin-bottom:6px;">
       <strong>Listing estimated at:</strong> GHS {{ offer.listing.final_estimated_value|floatformat:0 }}
     </div>
-    {% if offer.suggested_cash_topup_min and offer.suggested_cash_topup_min > 0 %}
-      <div style="background:var(--gold-soft); border:1px solid var(--gold); border-radius:10px; padding:10px 12px; margin-top:10px; font-size:0.83rem; color:#5b3c08; text-align:left;">
-        <strong>💡 Suggested top-up: GHS {{ offer.suggested_cash_topup_min|floatformat:0 }} – GHS {{ offer.suggested_cash_topup_max|floatformat:0 }}</strong><br>
-        Mentioning a willingness to add this when you message the seller could improve your chances.
-      </div>
-    {% elif offer.suggested_cash_topup_min is not None %}
-      <div style="background:#d1fae5; border:1px solid #6ee7b7; border-radius:10px; padding:10px 12px; margin-top:10px; font-size:0.83rem; color:#065f46; text-align:left;">
-        <strong>✅ Strong offer</strong> — your offer matches or exceeds the listing's estimated value.
-      </div>
-    {% endif %}
     {% if offer.message %}
       <div style="font-size:0.88rem; margin-top:8px;">
         <strong>Message:</strong> {{ offer.message }}
       </div>
     {% endif %}
+    <div style="margin-top:10px; font-size:0.83rem; color:var(--text-3);">
+      Status: <span class="badge badge-{{ offer.status }}">{{ offer.get_status_display }}</span>
+    </div>
   </div>
 
-  <!-- WhatsApp CTA -->
-  <div class="side-card" style="background:#d1fae5; border:1px solid #6ee7b7; margin-bottom:20px;">
-    <p style="font-size:0.93rem; color:#065f46; margin-bottom:12px; font-weight:700;">
-      📲 Contact the seller on WhatsApp
-    </p>
-    <a href="{{ whatsapp_link }}" target="_blank" class="btn btn-whatsapp btn-block btn-lg">
-      💬 Open WhatsApp Chat
-    </a>
-    <p style="font-size:0.78rem; color:#065f46; margin-top:8px;">
-      A message is pre-filled so they know you made an offer.
-    </p>
-  </div>
+  {% if contact_revealed and whatsapp_link %}
+    <!-- WhatsApp CTA -->
+    <div class="side-card" style="background:#d1fae5; border:1px solid #6ee7b7; margin-bottom:20px;">
+      <p style="font-size:0.93rem; color:#065f46; margin-bottom:12px; font-weight:700;">
+        📲 Contact the seller on WhatsApp
+      </p>
+      <a href="{{ whatsapp_link }}" target="_blank" class="btn btn-whatsapp btn-block btn-lg">
+        💬 Open WhatsApp Chat
+      </a>
+      <p style="font-size:0.78rem; color:#065f46; margin-top:8px;">
+        A message is pre-filled so they know you sent an {% if offer.offer_type == 'rental' %}rental request{% else %}offer{% endif %}.
+      </p>
+    </div>
+  {% else %}
+    <!-- Pending state -->
+    <div class="side-card" style="background:#fef9ec; border:1px solid #f5c842; margin-bottom:20px;">
+      <p style="font-size:0.93rem; color:#92610a; margin-bottom:6px; font-weight:700;">
+        ⏳ Waiting for seller response
+      </p>
+      <p style="font-size:0.85rem; color:#92610a;">
+        You'll receive a notification the moment the seller accepts, counters, or declines.
+        The WhatsApp contact will be unlocked once accepted.
+      </p>
+    </div>
+  {% endif %}
 
   <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
     <a href="{% url 'listing_detail' offer.listing.pk %}" class="btn btn-secondary">Back to Listing</a>

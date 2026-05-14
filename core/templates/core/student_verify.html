@@ -1,0 +1,55 @@
+{% extends "core/base.html" %}
+{% block title %}Student Verification – Sesika{% endblock %}
+
+{% block content %}
+<div style="max-width:520px; margin:0 auto;">
+  <div style="margin-bottom:16px;">
+    <a href="{% url 'profile' %}" class="btn btn-secondary btn-sm">← Back to profile</a>
+  </div>
+
+  <h1 class="page-title">🎓 Student Verification</h1>
+  <p style="color:var(--text-2); margin-bottom:20px; font-size:0.93rem;">
+    Verify your university email to unlock your Student badge and access your campus community feed.
+  </p>
+
+  <div class="form-card">
+    {% if error %}
+      <div style="background:#fce5e2; border:1px solid #fca5a5; border-radius:10px; padding:12px 14px; margin-bottom:14px; font-size:0.88rem; color:var(--danger);">
+        {{ error }}
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="form-group">
+        <label class="form-label" for="student_email">
+          University email <span class="req">*</span>
+        </label>
+        <input type="email" name="student_email" id="student_email"
+               placeholder="e.g. kwame@ug.edu.gh" autofocus>
+        <div class="form-hint">Must be from a recognised university domain.</div>
+      </div>
+
+      <div class="form-actions" style="justify-content:flex-end;">
+        <button type="submit" class="btn btn-primary btn-lg">
+          Send verification code
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5L16 12L9 19"/></svg>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  {% if domains %}
+    <div class="form-card" style="margin-top:16px;">
+      <div style="font-weight:600; font-size:0.9rem; margin-bottom:10px;">Supported universities</div>
+      {% for domain in domains %}
+        <div style="font-size:0.85rem; padding:6px 0; border-top:1px solid var(--border-soft);">
+          <strong>{{ domain.university_name }}</strong>
+          <span style="color:var(--text-3); font-size:0.78rem; margin-left:6px;">@{{ domain.domain }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

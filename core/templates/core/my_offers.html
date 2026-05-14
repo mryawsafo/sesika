@@ -28,11 +28,10 @@
       {% for offer in offers_made %}
         <div class="offer-card">
           <div class="offer-thumb">
-            {% if offer.listing.image %}
-              <img src="{{ offer.listing.image.url }}" alt="{{ offer.listing.title }}" />
-            {% else %}
-              <span>📦</span>
-            {% endif %}
+            {% with photo=offer.listing.primary_photo %}
+              {% if photo %}<img src="{{ photo.image.url }}" alt="{{ offer.listing.title }}" />
+              {% else %}<span>📦</span>{% endif %}
+            {% endwith %}
           </div>
           <div class="offer-body">
             <a href="{% url 'listing_detail' offer.listing.pk %}" class="offer-title">
@@ -46,19 +45,45 @@
                 Offering: {{ offer.offered_item_description|truncatechars:80 }}
               </div>
             {% endif %}
-            <div style="font-size:0.83rem; margin-top:2px;">
-              Cash top-up: <strong>GHS {{ offer.cash_topup|floatformat:2 }}</strong>
-            </div>
-            {% if offer.message %}
-              <div style="font-size:0.8rem; color:var(--text-3); font-style:italic; margin-top:2px;">"{{ offer.message|truncatechars:80 }}"</div>
+            {% if offer.cash_topup %}
+              <div style="font-size:0.83rem; margin-top:2px;">
+                Cash top-up: <strong>GHS {{ offer.cash_topup|floatformat:0 }}</strong>
+              </div>
+            {% endif %}
+            {% if offer.offer_type == 'rental' and offer.rental_start_date %}
+              <div style="font-size:0.83rem; color:var(--text-2); margin-top:2px;">
+                Rental: {{ offer.rental_start_date }} → {{ offer.rental_end_date }}
+              </div>
+            {% endif %}
+            {% if offer.status == 'countered' %}
+              <div style="margin-top:10px; padding:10px; background:#fef9ec; border:1px solid #f5c842; border-radius:8px;">
+                <div style="font-size:0.85rem; font-weight:600; color:#92610a; margin-bottom:4px;">Counteroffer received</div>
+                <div style="font-size:0.83rem; color:var(--text-2);">
+                  Seller requests <strong>GHS {{ offer.counter_cash_topup|floatformat:0 }}</strong> top-up.
+                  {% if offer.counter_message %}<br><em>"{{ offer.counter_message }}"</em>{% endif %}
+                </div>
+                <div style="display:flex; gap:6px; margin-top:8px;">
+                  <form method="post" action="{% url 'offer_update_status' offer.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="accept_counter">
+                    <button type="submit" class="btn btn-primary btn-sm">Accept Counter</button>
+                  </form>
+                  <form method="post" action="{% url 'offer_update_status' offer.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="reject_counter">
+                    <button type="submit" class="btn btn-danger btn-sm">Decline</button>
+                  </form>
+                </div>
+              </div>
             {% endif %}
           </div>
           <div class="offer-actions">
             <span class="badge badge-{{ offer.status }}">{{ offer.get_status_display }}</span>
-            {% if offer.contact_revealed %}
+            {% if offer.status == 'accepted' %}
               <a href="{{ offer.whatsapp_link }}" target="_blank" class="btn btn-whatsapp btn-sm">💬 WhatsApp</a>
-            {% else %}
-              <a href="{% url 'offer_success' offer.pk %}" class="btn btn-secondary btn-sm">Unlock Contact</a>
+              {% if not offer.ratings.filter.exists %}
+                <button class="btn btn-secondary btn-sm" onclick="showRatingModal('{{ offer.pk }}', '{{ offer.listing.title|escapejs }}')">⭐ Rate</button>
+              {% endif %}
             {% endif %}
           </div>
         </div>
@@ -81,11 +106,10 @@
       {% for offer in offers_received %}
         <div class="offer-card">
           <div class="offer-thumb">
-            {% if offer.listing.image %}
-              <img src="{{ offer.listing.image.url }}" alt="{{ offer.listing.title }}" />
-            {% else %}
-              <span>📦</span>
-            {% endif %}
+            {% with photo=offer.listing.primary_photo %}
+              {% if photo %}<img src="{{ photo.image.url }}" alt="{{ offer.listing.title }}" />
+              {% else %}<span>📦</span>{% endif %}
+            {% endwith %}
           </div>
           <div class="offer-body">
             <a href="{% url 'listing_detail' offer.listing.pk %}" class="offer-title">
@@ -99,12 +123,20 @@
                 Offering: {{ offer.offered_item_description|truncatechars:80 }}
               </div>
             {% endif %}
-            <div style="font-size:0.83rem; margin-top:2px;">
-              Cash top-up: <strong>GHS {{ offer.cash_topup|floatformat:2 }}</strong>
-            </div>
-            {% if offer.message %}
-              <div style="font-size:0.8rem; color:var(--text-3); font-style:italic; margin-top:2px;">"{{ offer.message|truncatechars:80 }}"</div>
+            {% if offer.cash_topup %}
+              <div style="font-size:0.83rem; margin-top:2px;">
+                Cash top-up offered: <strong>GHS {{ offer.cash_topup|floatformat:0 }}</strong>
+              </div>
             {% endif %}
+            {% if offer.offer_type == 'rental' and offer.rental_start_date %}
+              <div style="font-size:0.83rem; color:var(--text-2); margin-top:2px;">
+                Rental period: {{ offer.rental_start_date }} → {{ offer.rental_end_date }}
+              </div>
+              {% if offer.rental_payment_offered %}
+                <div style="font-size:0.83rem; color:var(--text-2);">Payment: {{ offer.rental_payment_offered }}</div>
+              {% endif %}
+            {% endif %}
+            {% if offer.message %}<div style="font-size:0.8rem; color:var(--text-3); font-style:italic; margin-top:2px;">"{{ offer.message|truncatechars:80 }}"</div>{% endif %}
           </div>
           <div class="offer-actions">
             <span class="badge badge-{{ offer.status }}">{{ offer.get_status_display }}</span>
@@ -120,8 +152,11 @@
                   <input type="hidden" name="action" value="reject">
                   <button type="submit" class="btn btn-danger btn-sm">Reject</button>
                 </form>
+                <button class="btn btn-secondary btn-sm" onclick="showCounterModal('{{ offer.pk }}')">Counter</button>
               </div>
-            {% elif offer.status == 'accepted' and offer.contact_revealed %}
+            {% elif offer.status == 'countered' %}
+              <span style="font-size:0.78rem; color:var(--text-3);">Awaiting response…</span>
+            {% elif offer.status == 'accepted' %}
               <a href="{{ offer.whatsapp_link }}" target="_blank" class="btn btn-whatsapp btn-sm">💬 WhatsApp Buyer</a>
             {% endif %}
           </div>
@@ -138,6 +173,59 @@
   {% endif %}
 </div>
 
+<!-- Counter offer modal -->
+<div id="counterModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:999; align-items:center; justify-content:center;">
+  <div style="background:var(--surface); border-radius:16px; padding:24px; max-width:400px; width:90%; margin:auto;">
+    <h3 style="margin-bottom:16px; font-size:1rem;">Send a Counteroffer</h3>
+    <form method="post" id="counterForm" action="">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="counter">
+      <div class="form-group">
+        {{ counter_form.counter_cash_topup.label_tag }}
+        {{ counter_form.counter_cash_topup }}
+      </div>
+      <div class="form-group">
+        {{ counter_form.counter_message.label_tag }}
+        {{ counter_form.counter_message }}
+      </div>
+      <div class="form-actions">
+        <button type="button" onclick="hideCounterModal()" class="btn btn-secondary">Cancel</button>
+        <button type="submit" class="btn btn-primary">Send Counter</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Rating modal -->
+<div id="ratingModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:999; align-items:center; justify-content:center;">
+  <div style="background:var(--surface); border-radius:16px; padding:24px; max-width:380px; width:90%; margin:auto;">
+    <h3 style="margin-bottom:4px; font-size:1rem;">Rate this trade</h3>
+    <p id="ratingListingTitle" style="font-size:0.85rem; color:var(--text-2); margin-bottom:16px;"></p>
+    <form method="post" id="ratingForm" action="">
+      {% csrf_token %}
+      <div class="form-group">
+        <label class="form-label">Score</label>
+        <div style="display:flex; gap:8px; font-size:1.5rem;">
+          {% for i in "12345" %}
+            <label style="cursor:pointer;">
+              <input type="radio" name="score" value="{{ i }}" style="display:none;" required>
+              <span class="star" data-val="{{ i }}">☆</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Comment (optional)</label>
+        <textarea name="comment" rows="2" placeholder="How did the trade go?"></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="button" onclick="hideRatingModal()" class="btn btn-secondary">Cancel</button>
+        <button type="submit" class="btn btn-primary">Submit Rating</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 function showTab(tab, btn) {
   document.getElementById('tab-made').style.display     = tab === 'made'     ? '' : 'none';
@@ -145,5 +233,31 @@ function showTab(tab, btn) {
   document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
   btn.classList.add('active');
 }
+function showCounterModal(offerPk) {
+  document.getElementById('counterForm').action = '/offers/' + offerPk + '/status/';
+  var m = document.getElementById('counterModal');
+  m.style.display = 'flex';
+}
+function hideCounterModal() {
+  document.getElementById('counterModal').style.display = 'none';
+}
+function showRatingModal(offerPk, title) {
+  document.getElementById('ratingForm').action = '/offers/' + offerPk + '/complete/';
+  document.getElementById('ratingListingTitle').textContent = title;
+  document.getElementById('ratingModal').style.display = 'flex';
+}
+function hideRatingModal() {
+  document.getElementById('ratingModal').style.display = 'none';
+}
+// Star rating UI
+document.querySelectorAll('.star').forEach(function(star) {
+  star.addEventListener('click', function() {
+    var val = parseInt(this.dataset.val);
+    document.querySelectorAll('.star').forEach(function(s, i) {
+      s.textContent = i < val ? '★' : '☆';
+      s.style.color = i < val ? '#f5a623' : '';
+    });
+  });
+});
 </script>
 {% endblock %}

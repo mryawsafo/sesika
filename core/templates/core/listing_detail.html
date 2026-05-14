@@ -11,64 +11,142 @@
 
   <!-- Left: main detail -->
   <div class="detail-main">
-    <div class="detail-image">
-      {% if listing.image %}
-        <img src="{{ listing.image.url }}" alt="{{ listing.title }}" />
-      {% else %}
-        <span>📦</span>
-      {% endif %}
-    </div>
+
+    <!-- Photo gallery -->
+    {% if photos %}
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px;">
+        {% for photo in photos %}
+          <img src="{{ photo.image.url }}" alt="{{ listing.title }}"
+               style="{% if forloop.first %}width:100%; max-height:340px;{% else %}width:calc(50% - 4px); max-height:160px;{% endif %} object-fit:cover; border-radius:10px; border:1px solid var(--border-soft);"
+               loading="{% if forloop.first %}eager{% else %}lazy{% endif %}" />
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="detail-image"><span>📦</span></div>
+    {% endif %}
 
     <h1 class="detail-title">{{ listing.title }}</h1>
 
     <div class="meta-row">
-      <span class="meta-chip">{{ listing.get_condition_display }}</span>
+      {% if listing.listing_type != 'service' %}
+        <span class="meta-chip">{{ listing.get_condition_display }}</span>
+      {% endif %}
       <span class="meta-chip">{{ listing.get_category_display }}{% if listing.subcategory %} › {{ listing.get_subcategory_display }}{% endif %}</span>
-      {% if listing.location %}<span class="meta-chip">📍 {{ listing.location }}</span>{% endif %}
-      <span style="color:var(--text-3);">· {{ listing.created_at|date:"d M Y" }}</span>
+      <span class="meta-chip {% if listing.transaction_type == 'rental' %}badge-rental{% endif %}">
+        {% if listing.transaction_type == 'rental' %}🔑 Rental{% else %}🔄 Trade{% endif %}
+      </span>
+      {% if listing.location_display %}<span class="meta-chip">📍 {{ listing.location_display }}</span>{% endif %}
+      <span style="color:var(--text-3); font-size:0.82rem;">· {{ listing.created_at|date:"d M Y" }}</span>
       <span class="badge badge-{{ listing.status }}">{{ listing.get_status_display }}</span>
     </div>
 
-    <div class="wants-box">
-      <div class="label-up" style="color:var(--gold-deep);">🔄 Seller is looking for</div>
-      <div class="wants-text">{{ listing.want_text }}</div>
-    </div>
+    {% if listing.transaction_type == 'trade' %}
+      <div class="wants-box">
+        <div class="label-up" style="color:var(--gold-deep);">🔄 Seller is looking for</div>
+        <div class="wants-text">{{ listing.want_text }}</div>
+      </div>
+    {% endif %}
+
+    {% if listing.transaction_type == 'rental' %}
+      <div class="wants-box">
+        <div class="label-up" style="color:var(--gold-deep);">🔑 Rental details</div>
+        <div class="wants-text">{{ listing.want_text }}</div>
+        {% if listing.rental_period_unit %}
+          <div style="font-size:0.85rem; color:var(--text-2); margin-top:6px;">Period: {{ listing.get_rental_period_unit_display }}</div>
+        {% endif %}
+        {% if listing.availability_notes %}
+          <div style="font-size:0.85rem; color:var(--text-2); margin-top:4px;">{{ listing.availability_notes }}</div>
+        {% endif %}
+        {% if listing.rental_conditions %}
+          <div style="font-size:0.82rem; color:var(--text-3); margin-top:4px;"><em>Conditions: {{ listing.rental_conditions }}</em></div>
+        {% endif %}
+      </div>
+    {% endif %}
 
     <div class="detail-section">
       <div class="label-up" style="margin-bottom:8px;">Description</div>
       <div class="description">{{ listing.description }}</div>
     </div>
 
-    <!-- Offers (owner only) -->
+    <!-- Extra attributes -->
+    {% if listing.brand or listing.model_name or listing.size or listing.colour %}
+      <div class="detail-section">
+        <div class="label-up" style="margin-bottom:8px;">Details</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 16px; font-size:0.85rem;">
+          {% if listing.brand %}<div><span style="color:var(--text-3);">Brand</span><br><strong>{{ listing.brand }}</strong></div>{% endif %}
+          {% if listing.model_name %}<div><span style="color:var(--text-3);">Model</span><br><strong>{{ listing.model_name }}</strong></div>{% endif %}
+          {% if listing.size %}<div><span style="color:var(--text-3);">Size</span><br><strong>{{ listing.size }}</strong></div>{% endif %}
+          {% if listing.colour %}<div><span style="color:var(--text-3);">Colour</span><br><strong>{{ listing.colour }}</strong></div>{% endif %}
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- AI enrichment section -->
+    {% if show_ai %}
+      <div class="detail-section" id="ai-section">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <div class="label-up" style="margin-bottom:0;">✨ AI Context</div>
+          <div style="display:flex; gap:6px;">
+            {% if is_owner %}
+              <button class="btn btn-secondary btn-sm" onclick="flagAI({{ listing.pk }})">🚩 Flag for review</button>
+              <button class="btn btn-secondary btn-sm" onclick="hideAI({{ listing.pk }})">🙈 Hide</button>
+            {% endif %}
+          </div>
+        </div>
+        <div style="font-size:0.78rem; color:var(--text-3); margin-bottom:10px; font-style:italic;">
+          AI-generated context — may not be fully accurate. Verify independently before trading.
+        </div>
+        {% with ai=listing.ai_enrichment %}
+          {% if ai.summary %}<p style="font-size:0.88rem; margin-bottom:8px;">{{ ai.summary }}</p>{% endif %}
+          {% if ai.key_attributes %}
+            <div style="font-size:0.83rem; color:var(--text-2); margin-bottom:6px;">
+              {% for attr in ai.key_attributes %}<span style="background:var(--border-soft); border-radius:6px; padding:2px 8px; margin-right:4px; margin-bottom:4px; display:inline-block;">{{ attr }}</span>{% endfor %}
+            </div>
+          {% endif %}
+          {% if ai.value_range_min and ai.value_range_max %}
+            <div style="font-size:0.83rem; color:var(--text-2);">
+              Market value range: <strong>GHS {{ ai.value_range_min|floatformat:0 }} – GHS {{ ai.value_range_max|floatformat:0 }}</strong>
+            </div>
+          {% endif %}
+          {% if ai.typical_use_cases %}
+            <div style="font-size:0.83rem; color:var(--text-2); margin-top:6px;">Common uses: {{ ai.typical_use_cases }}</div>
+          {% endif %}
+        {% endwith %}
+      </div>
+    {% endif %}
+
+    <!-- Offers received (owner only) -->
     {% if is_owner %}
       <div class="detail-section" style="margin-top:0;">
         <div class="section-title">📬 Offers Received ({{ listing.offer_count }})</div>
         {% for offer in listing.offers.all %}
           <div style="border-top:1px solid var(--border-soft); padding:12px 0; margin-top:8px;">
             <div class="flex-row" style="margin-bottom:4px;">
-              <strong style="font-size:0.9rem;">From: {{ offer.from_user.name|default:offer.from_user.phone }}</strong>
+              <strong style="font-size:0.9rem;">{{ offer.from_user.name|default:offer.from_user.phone }}</strong>
               <span class="badge badge-{{ offer.status }}">{{ offer.get_status_display }}</span>
             </div>
             {% if offer.offered_item_description %}
-              <p style="font-size:0.85rem; color:var(--text-2); margin-bottom:4px;">
-                Offering: {{ offer.offered_item_description }}
-              </p>
+              <p style="font-size:0.85rem; color:var(--text-2); margin-bottom:4px;">Offering: {{ offer.offered_item_description }}</p>
             {% endif %}
-            <p style="font-size:0.85rem; color:var(--text-2);">
-              Cash top-up: <strong style="color:var(--text);">GHS {{ offer.cash_topup }}</strong>
-            </p>
+            {% if offer.cash_topup %}
+              <p style="font-size:0.85rem; color:var(--text-2);">Cash top-up: <strong>GHS {{ offer.cash_topup|floatformat:0 }}</strong></p>
+            {% endif %}
+            {% if offer.rental_start_date %}
+              <p style="font-size:0.85rem; color:var(--text-2);">Rental: {{ offer.rental_start_date }} → {{ offer.rental_end_date }}</p>
+            {% endif %}
             {% if offer.message %}
-              <p style="font-size:0.82rem; color:var(--text-3); margin-top:4px; font-style:italic;">"{{ offer.message }}"</p>
+              <p style="font-size:0.82rem; color:var(--text-3); font-style:italic;">"{{ offer.message }}"</p>
             {% endif %}
             {% if offer.contact_revealed %}
               <span class="badge badge-active" style="margin-top:6px; display:inline-block;">Contact Revealed</span>
             {% endif %}
           </div>
         {% empty %}
-          <p class="text-muted" style="margin-top:8px;">No offers yet.</p>
+          <p style="margin-top:8px; font-size:0.85rem; color:var(--text-2);">No offers yet.</p>
         {% endfor %}
       </div>
     {% endif %}
+
   </div>
 
   <!-- Right: sidebar -->
@@ -106,13 +184,24 @@
       <div class="seller-row">
         <div class="seller-avatar">{{ listing.user.name|default:"?"|slice:":2"|upper }}</div>
         <div>
-          <div class="seller-name">{{ listing.user.name|default:"Anonymous" }}</div>
-          <div class="seller-loc">{{ listing.user.location|default:"Location not set" }}</div>
+          <div class="seller-name">
+            {{ listing.user.name|default:"Anonymous" }}
+            {% if listing.user.is_student_verified %}<span class="locked-pill" style="background:#d1fae5; color:#065f46; font-size:0.72rem; margin-left:4px;">🎓 Student</span>{% endif %}
+            {% if listing.user.is_verified %}<span class="locked-pill" style="font-size:0.72rem; margin-left:4px;">✓ Verified</span>{% endif %}
+          </div>
+          {% if listing.user.location_display %}
+            <div class="seller-loc">📍 {{ listing.user.location_display }}</div>
+          {% endif %}
+          {% if listing.user.completed_trades_count %}
+            <div style="font-size:0.78rem; color:var(--text-3);">{{ listing.user.completed_trades_count }} trade{{ listing.user.completed_trades_count|pluralize }} completed</div>
+          {% endif %}
         </div>
       </div>
-      <div class="contact-veil">
-        🔒 Contact revealed after you make an offer
-      </div>
+      {% if not contact_revealed %}
+        <div class="contact-veil">
+          🔒 Contact {% if listing.user.contact_reveal_preference == 'on_any_offer' %}revealed when you make an offer{% else %}revealed after offer is accepted{% endif %}
+        </div>
+      {% endif %}
     </div>
 
     <!-- Save toggle -->
@@ -132,7 +221,18 @@
       <div class="side-card cta-card">
         <div class="section-title">Manage Listing</div>
         <a href="{% url 'listing_edit' listing.pk %}" class="btn btn-secondary btn-block">Edit Listing</a>
-        <form method="post" action="{% url 'listing_delete' listing.pk %}"
+        {% if listing.status == 'active' %}
+          <form method="post" action="{% url 'listing_pause_toggle' listing.pk %}" style="margin-top:6px;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary btn-block">⏸ Pause Listing</button>
+          </form>
+        {% elif listing.status == 'paused' %}
+          <form method="post" action="{% url 'listing_pause_toggle' listing.pk %}" style="margin-top:6px;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary btn-block">▶ Resume Listing</button>
+          </form>
+        {% endif %}
+        <form method="post" action="{% url 'listing_delete' listing.pk %}" style="margin-top:6px;"
               onsubmit="return confirm('Delete this listing? This cannot be undone.');">
           {% csrf_token %}
           <button type="submit" class="btn btn-danger btn-block">Delete Listing</button>
@@ -142,47 +242,76 @@
     <!-- Already made an offer -->
     {% elif user_offer %}
       <div class="side-card cta-card" style="text-align:center;">
-        <div class="section-title" style="margin-bottom:6px;">✅ You made an offer!</div>
-        <p class="text-muted" style="margin-bottom:12px; font-size:0.85rem;">
-          Contact is revealed. Chat with the seller on WhatsApp.
+        {% if contact_revealed %}
+          <div class="section-title" style="margin-bottom:6px;">✅ Offer sent!</div>
+          <p style="font-size:0.85rem; color:var(--text-2); margin-bottom:12px;">
+            Contact unlocked. Chat with the seller on WhatsApp.
+          </p>
+          <a href="{{ user_offer.whatsapp_link }}" target="_blank" class="btn btn-whatsapp btn-block">
+            💬 Open WhatsApp
+          </a>
+        {% else %}
+          <div class="section-title" style="margin-bottom:6px;">⏳ Offer pending</div>
+          <p style="font-size:0.85rem; color:var(--text-2); margin-bottom:8px;">
+            Waiting for the seller to respond.
+          </p>
+        {% endif %}
+        <p style="font-size:0.78rem; color:var(--text-3); margin-top:8px;">
+          Status: <strong>{{ user_offer.get_status_display }}</strong>
         </p>
-        <a href="{{ user_offer.whatsapp_link }}" target="_blank" class="btn btn-whatsapp btn-block">
-          💬 Open WhatsApp
-        </a>
-        <p class="text-muted" style="margin-top:8px; font-size:0.78rem;">
-          Offer status: <strong>{{ user_offer.get_status_display }}</strong>
-        </p>
+        <a href="{% url 'my_offers' %}" class="btn btn-secondary btn-block" style="margin-top:8px;">View My Offers</a>
       </div>
 
     <!-- Active listing, logged in -->
     {% elif listing.status == 'active' %}
       {% if barter_user %}
         <div class="side-card cta-card">
-          <div class="section-title" style="margin-bottom:6px;">Make an Offer</div>
-          <p class="text-muted" style="font-size:0.85rem; margin-bottom:12px;">
-            Submit an offer to reveal the seller's WhatsApp contact.
+          <div class="section-title" style="margin-bottom:6px;">
+            {% if listing.transaction_type == 'rental' %}Request to Rent{% else %}Make an Offer{% endif %}
+          </div>
+          <p style="font-size:0.85rem; color:var(--text-2); margin-bottom:12px;">
+            {% if listing.user.contact_reveal_preference == 'on_any_offer' %}
+              Submitting {% if listing.transaction_type == 'rental' %}a request{% else %}an offer{% endif %} will unlock the seller's WhatsApp contact.
+            {% else %}
+              Contact revealed when the seller accepts your {% if listing.transaction_type == 'rental' %}request{% else %}offer{% endif %}.
+            {% endif %}
           </p>
           <a href="{% url 'offer_create' listing.pk %}" class="btn btn-primary btn-block btn-lg">
-            Make Offer →
+            {% if listing.transaction_type == 'rental' %}Request Rental →{% else %}Make Offer →{% endif %}
           </a>
         </div>
       {% else %}
         <div class="side-card cta-card" style="text-align:center;">
-          <p class="text-muted" style="margin-bottom:12px; font-size:0.88rem;">
-            Log in to make an offer and reveal the seller's contact.
+          <p style="font-size:0.88rem; color:var(--text-2); margin-bottom:12px;">
+            Log in to {% if listing.transaction_type == 'rental' %}request a rental{% else %}make an offer{% endif %}.
           </p>
-          <a href="{% url 'login' %}" class="btn btn-primary btn-block">Login to Make Offer</a>
+          <a href="{% url 'login' %}" class="btn btn-primary btn-block">Login to Continue</a>
         </div>
       {% endif %}
 
-    <!-- Inactive listing -->
+    <!-- Inactive -->
     {% else %}
       <div class="side-card" style="text-align:center;">
-        <p class="text-muted" style="margin-bottom:12px;">This listing is no longer active.</p>
+        <p style="font-size:0.88rem; color:var(--text-2); margin-bottom:12px;">This listing is no longer active.</p>
         <a href="{% url 'home' %}" class="btn btn-secondary btn-block">Browse similar items →</a>
       </div>
     {% endif %}
 
   </aside>
 </div>
+
+{% if is_owner %}
+<script>
+function hideAI(pk) {
+  if (!confirm('Hide the AI section from your listing? You can ask admin to restore it.')) return;
+  fetch('/listings/' + pk + '/ai/hide/', {method:'POST', headers:{'X-CSRFToken': '{{ csrf_token }}'}})
+    .then(function() { document.getElementById('ai-section').style.display='none'; });
+}
+function flagAI(pk) {
+  if (!confirm('Flag the AI section for admin review?')) return;
+  fetch('/listings/' + pk + '/ai/flag/', {method:'POST', headers:{'X-CSRFToken': '{{ csrf_token }}'}})
+    .then(function() { alert('Flagged for review. Admin will check it shortly.'); });
+}
+</script>
+{% endif %}
 {% endblock %}

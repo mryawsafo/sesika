@@ -10,7 +10,12 @@
 
   <h1 class="page-title">{% if item %}Edit wishlist item{% else %}What are you looking for?{% endif %}</h1>
   <p style="color:var(--text-2); margin-bottom:20px; font-size:0.93rem;">
-    {% if item %}Update the details for this wishlist item.{% else %}Add an item to your wishlist and we'll notify you when a matching listing appears.{% endif %}
+    {% if item %}
+      Update the details for this wishlist item.
+    {% else %}
+      Tell us what you want and we'll notify you the moment a match appears.
+      Think broadly — the more you add, the more matches you'll get.
+    {% endif %}
   </p>
 
   <div class="form-card">
@@ -19,32 +24,56 @@
 
       <div class="form-group">
         <label class="form-label" for="{{ form.title.id_for_label }}">
-          Item name <span class="req">*</span>
+          What do you want? <span class="req">*</span>
         </label>
         {{ form.title }}
-        {% if form.title.errors %}
-          <ul class="errorlist">{% for e in form.title.errors %}<li>{{ e }}</li>{% endfor %}</ul>
-        {% endif %}
+        <div class="form-hint">Be specific or broad — e.g. "iPhone 12", "potted plants", "any laptop"</div>
+        {% if form.title.errors %}<ul class="errorlist">{% for e in form.title.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.want_type.id_for_label }}">Are you buying or renting?</label>
+          {{ form.want_type }}
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.term_type.id_for_label }}">How urgent?</label>
+          {{ form.term_type }}
+        </div>
       </div>
 
       <div class="form-group">
         <label class="form-label" for="{{ form.category.id_for_label }}">Category (optional)</label>
         {{ form.category }}
-        {% if form.category.errors %}
-          <ul class="errorlist">{% for e in form.category.errors %}<li>{{ e }}</li>{% endfor %}</ul>
-        {% endif %}
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.condition_acceptable.id_for_label }}">Minimum condition</label>
+          {{ form.condition_acceptable }}
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.size_preference.id_for_label }}">Size preference</label>
+          {{ form.size_preference }}
+        </div>
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="{{ form.description.id_for_label }}">Details (optional)</label>
+        <label class="form-label" for="{{ form.description.id_for_label }}">Extra details (optional)</label>
         {{ form.description }}
-        <div class="form-hint">Condition, brand, size — the more specific, the better the match.</div>
+        <div class="form-hint">Brand, model, colour, specific features you need.</div>
       </div>
 
-      <div class="form-group">
-        <label class="form-label" for="{{ form.max_budget.id_for_label }}">Max budget (GHS)</label>
-        {{ form.max_budget }}
-        <div class="form-hint">Leave blank if you have no budget limit.</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.max_budget.id_for_label }}">Max budget (GHS)</label>
+          {{ form.max_budget }}
+          <div class="form-hint">Leave blank for no limit.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.notification_frequency.id_for_label }}">Notify me</label>
+          {{ form.notification_frequency }}
+        </div>
       </div>
 
       <div class="form-actions">

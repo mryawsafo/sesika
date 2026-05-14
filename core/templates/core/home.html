@@ -1,5 +1,4 @@
 {% extends "core/base.html" %}
-
 {% block title %}Sesika – Trade Anything{% endblock %}
 
 {% block content %}
@@ -20,15 +19,38 @@
 
 <!-- Category filter pills -->
 <div class="pills-row">
-  <a href="{% url 'home' %}" class="pill {% if not selected_category %}active{% endif %}">All</a>
+  <a href="{% url 'home' %}" class="pill {% if not selected_category and not selected_type and not selected_region %}active{% endif %}">All</a>
   {% for value, label in category_choices %}
-    <a href="?category={{ value }}" class="pill {% if selected_category == value %}active{% endif %}">{{ label }}</a>
+    <a href="?category={{ value }}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_region %}&region={{ selected_region }}{% endif %}"
+       class="pill {% if selected_category == value %}active{% endif %}">{{ label }}</a>
   {% endfor %}
 </div>
-{% if selected_category %}
+
+<!-- Type + region filters -->
+<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; align-items:center;">
+  <div style="display:flex; gap:6px;">
+    <a href="?{% if selected_category %}category={{ selected_category }}&{% endif %}{% if selected_region %}region={{ selected_region }}{% endif %}"
+       class="btn btn-sm {% if not selected_type %}btn-primary{% else %}btn-secondary{% endif %}" style="font-size:0.82rem; padding:4px 12px;">All types</a>
+    <a href="?{% if selected_category %}category={{ selected_category }}&{% endif %}type=trade{% if selected_region %}&region={{ selected_region }}{% endif %}"
+       class="btn btn-sm {% if selected_type == 'trade' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-size:0.82rem; padding:4px 12px;">🔄 Trades</a>
+    <a href="?{% if selected_category %}category={{ selected_category }}&{% endif %}type=rental{% if selected_region %}&region={{ selected_region }}{% endif %}"
+       class="btn btn-sm {% if selected_type == 'rental' %}btn-primary{% else %}btn-secondary{% endif %}" style="font-size:0.82rem; padding:4px 12px;">🔑 Rentals</a>
+  </div>
+  <select onchange="applyRegion(this.value)"
+          style="padding:4px 10px; border:1px solid var(--border); border-radius:8px; background:var(--card); font-size:0.82rem; cursor:pointer;">
+    <option value="">All regions</option>
+    {% for value, label in region_choices %}
+      <option value="{{ value }}" {% if selected_region == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  {% if selected_category or selected_type or selected_region %}
+    <a href="{% url 'home' %}" style="font-size:0.82rem; color:var(--green);">✕ Clear filters</a>
+  {% endif %}
+</div>
+
+{% if selected_category or selected_type or selected_region %}
   <p style="font-size:0.82rem; color:var(--text-2); margin-bottom:12px;">
-    Showing <strong>{{ listings.count }}</strong> listing{{ listings.count|pluralize }} in this category.
-    <a href="{% url 'home' %}" style="color:var(--green);">Clear filter</a>
+    Showing <strong>{{ listings.count }}</strong> listing{{ listings.count|pluralize }}.
   </p>
 {% endif %}
 
@@ -39,34 +61,49 @@
       <article class="listing-card" style="position:relative;">
         <a href="{% url 'listing_detail' listing.pk %}" style="display:contents;">
           <div class="listing-thumb">
-            {% if listing.image %}
-              <img src="{{ listing.image.url }}" alt="{{ listing.title }}" loading="lazy" />
-            {% else %}
-              <span style="font-size:1.5rem; opacity:0.4;">📦</span>
+            {% with photo=listing.primary_photo %}
+              {% if photo %}
+                <img src="{{ photo.image.url }}" alt="{{ listing.title }}" loading="lazy" />
+              {% else %}
+                <span style="font-size:1.5rem; opacity:0.4;">📦</span>
+              {% endif %}
+            {% endwith %}
+            {% if listing.listing_type != 'service' %}
+              <span class="condition-badge {{ listing.condition }}">{{ listing.get_condition_display }}</span>
             {% endif %}
-            <span class="condition-badge {{ listing.condition }}">{{ listing.get_condition_display }}</span>
+            {% if listing.transaction_type == 'rental' %}
+              <span style="position:absolute; top:6px; left:6px; background:var(--green); color:#fff; font-size:0.7rem; font-weight:700; padding:2px 7px; border-radius:20px;">🔑 RENT</span>
+            {% endif %}
           </div>
           <div class="listing-body">
             <div class="listing-meta-row">
               <span>{{ listing.get_category_display }}</span>
-              {% if listing.location %}
+              {% if listing.location_display %}
                 <span class="dot-sep"></span>
-                <span>📍 {{ listing.location }}</span>
+                <span>📍 {{ listing.location_display }}</span>
               {% endif %}
             </div>
             <h3 class="listing-title">{{ listing.title }}</h3>
             <div class="listing-price"><span class="ghs">GHS</span>{{ listing.final_estimated_value|floatformat:0 }}</div>
-            <div class="wants-chip">
-              <span class="wc-label">WANTS:</span>
-              <span class="wc-text">{{ listing.want_text|truncatechars:60 }}</span>
-            </div>
+            {% if listing.transaction_type == 'rental' %}
+              <div class="wants-chip">
+                <span class="wc-label">RENTAL:</span>
+                <span class="wc-text">{{ listing.want_text|truncatechars:60 }}</span>
+              </div>
+            {% else %}
+              <div class="wants-chip">
+                <span class="wc-label">WANTS:</span>
+                <span class="wc-text">{{ listing.want_text|truncatechars:60 }}</span>
+              </div>
+            {% endif %}
           </div>
         </a>
         {% if barter_user %}
           <form method="post" action="{% url 'listing_save_toggle' listing.pk %}" style="position:absolute; top:8px; right:8px; z-index:1; margin:0;">
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <button type="submit" class="save-btn {% if listing.pk in saved_pks %}saved{% endif %}" aria-label="{% if listing.pk in saved_pks %}Remove from saved{% else %}Save listing{% endif %}">
+            <button type="submit" class="save-btn {% if listing.pk in saved_pks %}saved{% endif %}"
+                    aria-label="{% if listing.pk in saved_pks %}Remove from saved{% else %}Save listing{% endif %}">
               {% if listing.pk in saved_pks %}
                 <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 4 H18 V21 L12 17 L6 21 Z"/></svg>
               {% else %}
@@ -81,15 +118,26 @@
 {% else %}
   <div class="empty">
     <div class="empty-icon">📦</div>
-    <div class="empty-title">No listings yet</div>
+    <div class="empty-title">No listings found</div>
     <div class="empty-sub">
-      {% if selected_category %}
-        Nothing in this category yet — be the first to list something here.
+      {% if selected_category or selected_type or selected_region %}
+        Nothing matches these filters — try broadening your search.
       {% else %}
         Be the first to list something and start the market.
       {% endif %}
     </div>
-    <a href="{% url 'listing_create' %}" class="btn btn-primary" style="margin-top:4px;">List an Item</a>
+    {% if barter_user %}
+      <a href="{% url 'listing_create' %}" class="btn btn-primary" style="margin-top:4px;">List an Item</a>
+    {% endif %}
   </div>
 {% endif %}
+
+<script>
+function applyRegion(val) {
+  var url = new URL(window.location.href);
+  if (val) { url.searchParams.set('region', val); }
+  else { url.searchParams.delete('region'); }
+  window.location.href = url.toString();
+}
+</script>
 {% endblock %}

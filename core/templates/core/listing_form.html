@@ -2,7 +2,7 @@
 {% block title %}{{ action }} Listing – Sesika{% endblock %}
 
 {% block content %}
-<div style="max-width:640px; margin:0 auto;">
+<div style="max-width:720px; margin:0 auto;">
   <div style="margin-bottom:16px;">
     {% if listing %}
       <a href="{% url 'listing_detail' listing.pk %}" class="btn btn-secondary btn-sm">← Back to listing</a>
@@ -17,15 +17,29 @@
     <form method="post" enctype="multipart/form-data" novalidate>
       {% csrf_token %}
 
+      <!-- Type row -->
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.transaction_type.id_for_label }}">
+            Trade or Rent? <span class="req">*</span>
+          </label>
+          {{ form.transaction_type }}
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.listing_type.id_for_label }}">
+            Item type <span class="req">*</span>
+          </label>
+          {{ form.listing_type }}
+        </div>
+      </div>
+
       <!-- Title -->
       <div class="form-group">
         <label class="form-label" for="{{ form.title.id_for_label }}">
-          Item title <span class="req">*</span>
+          Title <span class="req">*</span>
         </label>
         {{ form.title }}
-        {% if form.title.errors %}
-          <ul class="errorlist">{% for e in form.title.errors %}<li>{{ e }}</li>{% endfor %}</ul>
-        {% endif %}
+        {% if form.title.errors %}<ul class="errorlist">{% for e in form.title.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
       </div>
 
       <!-- Category -->
@@ -34,30 +48,23 @@
           Category <span class="req">*</span>
         </label>
         {{ form.category }}
-        {% if form.category.errors %}
-          <ul class="errorlist">{% for e in form.category.errors %}<li>{{ e }}</li>{% endfor %}</ul>
-        {% endif %}
+        {% if form.category.errors %}<ul class="errorlist">{% for e in form.category.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
       </div>
 
-      <!-- Subcategory — revealed when category has subcategories -->
+      <!-- Subcategory (revealed by JS) -->
       <div id="subcategory-group" class="subcategory-wrap" style="display:none; margin-bottom:1rem;">
-        <label class="form-label" for="{{ form.subcategory.id_for_label }}" id="subcategory-label"
-               style="font-size:0.83rem; color:var(--text-2);">Subcategory</label>
+        <label class="form-label" id="subcategory-label" style="font-size:0.83rem; color:var(--text-2);">Subcategory</label>
         {{ form.subcategory }}
-        {% if form.subcategory.errors %}
-          <ul class="errorlist">{% for e in form.subcategory.errors %}<li>{{ e }}</li>{% endfor %}</ul>
-        {% endif %}
+        {% if form.subcategory.errors %}<ul class="errorlist">{% for e in form.subcategory.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
       </div>
 
-      <!-- Condition -->
-      <div class="form-group">
+      <!-- Condition (hidden for services) -->
+      <div class="form-group" id="condition-group">
         <label class="form-label" for="{{ form.condition.id_for_label }}">
           Condition <span class="req">*</span>
         </label>
         {{ form.condition }}
-        {% if form.condition.errors %}
-          <ul class="errorlist">{% for e in form.condition.errors %}<li>{{ e }}</li>{% endfor %}</ul>
-        {% endif %}
+        {% if form.condition.errors %}<ul class="errorlist">{% for e in form.condition.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
       </div>
 
       <!-- Description -->
@@ -66,63 +73,192 @@
           Description <span class="req">*</span>
         </label>
         {{ form.description }}
-        {% if form.description.errors %}
-          <ul class="errorlist">{% for e in form.description.errors %}<li>{{ e }}</li>{% endfor %}</ul>
-        {% endif %}
+        {% if form.description.errors %}<ul class="errorlist">{% for e in form.description.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
       </div>
 
-      <!-- Value + Location (2-col) -->
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label" for="{{ form.user_estimated_value.id_for_label }}">
-            Your estimated value (GHS) <span class="req">*</span>
-          </label>
-          {{ form.user_estimated_value }}
-          <div class="form-hint">We'll cross-check this with current market prices.</div>
-          {% if form.user_estimated_value.errors %}
-            <ul class="errorlist">{% for e in form.user_estimated_value.errors %}<li>{{ e }}</li>{% endfor %}</ul>
-          {% endif %}
+      <!-- Physical item extras -->
+      <div id="physical-fields">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.brand.id_for_label }}">Brand</label>
+            {{ form.brand }}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.model_name.id_for_label }}">Model</label>
+            {{ form.model_name }}
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.size.id_for_label }}">Size</label>
+            {{ form.size }}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.colour.id_for_label }}">Colour</label>
+            {{ form.colour }}
+          </div>
         </div>
         <div class="form-group">
-          <label class="form-label" for="{{ form.location.id_for_label }}">Location</label>
-          {{ form.location }}
-          {% if form.location.errors %}
-            <ul class="errorlist">{% for e in form.location.errors %}<li>{{ e }}</li>{% endfor %}</ul>
-          {% endif %}
+          <label class="form-label" for="{{ form.gender.id_for_label }}">Gender</label>
+          {{ form.gender }}
+        </div>
+      </div>
+
+      <!-- Handmade-only extras -->
+      <div id="handmade-fields" style="display:none;">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.materials_used.id_for_label }}">Materials used</label>
+          {{ form.materials_used }}
+        </div>
+      </div>
+
+      <!-- Service fields -->
+      <div id="service-fields" style="display:none;">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.service_scope.id_for_label }}">
+            Service scope <span class="req">*</span>
+          </label>
+          {{ form.service_scope }}
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.service_timeline_days.id_for_label }}">Delivery timeline (days)</label>
+            {{ form.service_timeline_days }}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.warranty_offered.id_for_label }}">Warranty included?</label>
+            {{ form.warranty_offered }}
+          </div>
+        </div>
+        <div id="warranty-duration-group" style="display:none;">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.warranty_duration_days.id_for_label }}">Warranty duration (days)</label>
+            {{ form.warranty_duration_days }}
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.repair_description.id_for_label }}">What was repaired (if applicable)</label>
+          {{ form.repair_description }}
+        </div>
+      </div>
+
+      <!-- Rental-specific fields -->
+      <div id="rental-fields" style="display:none;">
+        <hr style="border:none; border-top:1px solid var(--border-soft); margin:12px 0 16px;">
+        <div style="font-size:0.9rem; font-weight:600; color:var(--text-2); margin-bottom:12px;">Rental details</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.rental_period_unit.id_for_label }}">Rental period</label>
+            {{ form.rental_period_unit }}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.deposit_required.id_for_label }}">Deposit required?</label>
+            {{ form.deposit_required }}
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.rental_payment_description.id_for_label }}">What payment do you accept?</label>
+          {{ form.rental_payment_description }}
+        </div>
+        <div id="deposit-desc-group" style="display:none;">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.deposit_description.id_for_label }}">Deposit details</label>
+            {{ form.deposit_description }}
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.availability_notes.id_for_label }}">Availability</label>
+          {{ form.availability_notes }}
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.rental_conditions.id_for_label }}">Rental conditions</label>
+          {{ form.rental_conditions }}
+          <div class="form-hint">Renters are responsible for damage, loss, or non-return of your item.</div>
+        </div>
+      </div>
+
+      <!-- Value -->
+      <div class="form-group">
+        <label class="form-label" for="{{ form.user_estimated_value.id_for_label }}">
+          Your estimated value (GHS) <span class="req">*</span>
+        </label>
+        {{ form.user_estimated_value }}
+        <div class="form-hint">We'll cross-check with current market prices and suggest a fair range.</div>
+        {% if form.user_estimated_value.errors %}<ul class="errorlist">{% for e in form.user_estimated_value.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+
+      <!-- Location -->
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.location_region.id_for_label }}">Region <span class="req">*</span></label>
+          {{ form.location_region }}
+          {% if form.location_region.errors %}<ul class="errorlist">{% for e in form.location_region.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.location_city.id_for_label }}">City / Town</label>
+          {{ form.location_city }}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="{{ form.location_neighbourhood.id_for_label }}">Neighbourhood (optional)</label>
+        {{ form.location_neighbourhood }}
+      </div>
+
+      <!-- Collection method & cash top-up (trade only) -->
+      <div id="trade-logistics" class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.collection_method.id_for_label }}">Collection method</label>
+          {{ form.collection_method }}
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="{{ form.cash_topup_direction.id_for_label }}">Cash top-up</label>
+          {{ form.cash_topup_direction }}
         </div>
       </div>
 
       <!-- Want text -->
-      <div class="form-group">
-        <label class="form-label" for="{{ form.want_text.id_for_label }}">
+      <div class="form-group" id="want-text-group">
+        <label class="form-label" id="want-text-label" for="{{ form.want_text.id_for_label }}">
           What do you want in exchange? <span class="req">*</span>
         </label>
         {{ form.want_text }}
-        <div class="form-hint">{{ form.want_text.help_text }}</div>
-        {% if form.want_text.errors %}
-          <ul class="errorlist">{% for e in form.want_text.errors %}<li>{{ e }}</li>{% endfor %}</ul>
-        {% endif %}
+        <div class="form-hint">e.g. laptop, potted plants, GHS 2,000 cash — think broadly!</div>
+        {% if form.want_text.errors %}<ul class="errorlist">{% for e in form.want_text.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
       </div>
 
-      <!-- Photo -->
-      <div class="form-group">
-        <label class="form-label" for="{{ form.image.id_for_label }}">Photo</label>
-        {% if listing and listing.image %}
-          <div style="margin-bottom:10px;">
-            <img src="{{ listing.image.url }}" alt="Current photo"
-                 style="max-height:140px; border-radius:10px; object-fit:cover; border:1px solid var(--border-soft);" />
-            <div class="form-hint" style="margin-top:4px;">Upload a new image to replace this one.</div>
-          </div>
-        {% endif %}
-        <div class="photo-uploader" onclick="document.getElementById('{{ form.image.id_for_label }}').click()">
-          <div style="font-size:1.5rem; margin-bottom:6px;">📷</div>
-          <div style="font-size:0.88rem; color:var(--text-2);">Tap to upload a photo</div>
-          <div style="font-size:0.78rem; color:var(--text-3); margin-top:2px;">JPG, PNG · max 5 MB</div>
+      <!-- Listing behaviour -->
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="{{ form.listing_behaviour.id_for_label }}">Listing duration</label>
+          {{ form.listing_behaviour }}
         </div>
-        <div style="display:none;">{{ form.image }}</div>
-        {% if form.image.errors %}
-          <ul class="errorlist">{% for e in form.image.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        <div class="form-group" id="duration-group" style="display:none;">
+          <label class="form-label" for="{{ form.duration_days.id_for_label }}">Duration</label>
+          {{ form.duration_days }}
+          {% if form.duration_days.errors %}<ul class="errorlist">{% for e in form.duration_days.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+        </div>
+      </div>
+
+      <!-- Photos -->
+      <div class="form-group">
+        <label class="form-label">Photos <span class="req">*</span></label>
+        {% if existing_photos %}
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            {% for photo in existing_photos %}
+              <img src="{{ photo.image.url }}" alt="Photo {{ forloop.counter }}"
+                   style="width:80px; height:80px; object-fit:cover; border-radius:8px; border:1px solid var(--border-soft);" />
+            {% endfor %}
+          </div>
+          <div class="form-hint" style="margin-bottom:8px;">Upload new photos to replace all existing ones.</div>
         {% endif %}
+        <div class="photo-uploader" onclick="document.getElementById('photos-input').click()">
+          <div style="font-size:1.5rem; margin-bottom:6px;">📷</div>
+          <div style="font-size:0.88rem; color:var(--text-2);" id="photo-label">Tap to upload 1–3 photos</div>
+          <div style="font-size:0.78rem; color:var(--text-3); margin-top:2px;">JPG, PNG · max 5 MB each</div>
+        </div>
+        <input type="file" id="photos-input" name="photos" multiple accept="image/jpeg,image/png,image/webp"
+               style="display:none;" onchange="updatePhotoLabel(this)">
+        <div id="photo-preview" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;"></div>
       </div>
 
       <div class="form-actions">
@@ -141,49 +277,108 @@
 </div>
 
 <script>
-(function () {
-  const choices = {{ subcategory_choices_json|safe }};
-  const catEl   = document.getElementById('id_category');
-  const subEl   = document.getElementById('id_subcategory');
-  const subGroup = document.getElementById('subcategory-group');
-  const subLabel = document.getElementById('subcategory-label');
+(function() {
+  var subcatChoices = {{ subcategory_choices_json|safe }};
+  var catEl        = document.getElementById('id_category');
+  var subEl        = document.getElementById('id_subcategory');
+  var subGroup     = document.getElementById('subcategory-group');
+  var subLabel     = document.getElementById('subcategory-label');
+  var typeEl       = document.getElementById('id_listing_type');
+  var txnEl        = document.getElementById('id_transaction_type');
+  var behaviourEl  = document.getElementById('id_listing_behaviour');
+  var warrantyEl   = document.getElementById('id_warranty_offered');
+  var depositEl    = document.getElementById('id_deposit_required');
+  var initialSub   = subEl ? subEl.value : '';
+  var catLabels    = {};
+  if (catEl) Array.from(catEl.options).forEach(function(o) { catLabels[o.value] = o.text; });
 
-  // Capture any pre-selected subcategory (edit mode) before we rebuild the options
-  const initialSub = subEl.value;
-
-  const catLabels = {};
-  Array.from(catEl.options).forEach(function(o) { catLabels[o.value] = o.text; });
-
-  function refresh(preserveValue) {
-    const subs = choices[catEl.value] || [];
-
+  function refreshSubcategory(preserve) {
+    if (!catEl || !subEl) return;
+    var subs = subcatChoices[catEl.value] || [];
     subEl.innerHTML = '<option value="">— Select subcategory —</option>';
     subs.forEach(function(pair) {
-      const opt = document.createElement('option');
-      opt.value = pair[0];
-      opt.textContent = pair[1];
-      if (pair[0] === preserveValue) opt.selected = true;
-      subEl.appendChild(opt);
+      var o = document.createElement('option');
+      o.value = pair[0]; o.textContent = pair[1];
+      if (pair[0] === preserve) o.selected = true;
+      subEl.appendChild(o);
     });
-
-    if (subs.length > 0) {
-      const catName = catLabels[catEl.value] || 'Category';
-      subLabel.textContent = catName + ' › Subcategory';
-      subGroup.style.display = 'block';
-    } else {
-      subGroup.style.display = 'none';
-    }
+    if (subLabel) subLabel.textContent = (catLabels[catEl.value] || 'Category') + ' › Subcategory';
+    if (subGroup) subGroup.style.display = subs.length > 0 ? 'block' : 'none';
   }
 
-  catEl.addEventListener('change', function() {
-    refresh('');  // clear subcategory when category changes
-  });
-
-  // On load: if a category is already selected (edit mode or validation error re-render),
-  // show the subcategory row and restore the selected value
-  if (catEl.value) {
-    refresh(initialSub);
+  function refreshListingType() {
+    var t = typeEl ? typeEl.value : 'physical';
+    var physEl = document.getElementById('physical-fields');
+    var handEl = document.getElementById('handmade-fields');
+    var svcEl  = document.getElementById('service-fields');
+    var condEl = document.getElementById('condition-group');
+    if (physEl) physEl.style.display  = t === 'physical'  ? '' : 'none';
+    if (handEl) handEl.style.display  = t === 'handmade'  ? '' : 'none';
+    if (svcEl)  svcEl.style.display   = t === 'service'   ? '' : 'none';
+    if (condEl) condEl.style.display  = t === 'service'   ? 'none' : '';
   }
+
+  function refreshTransactionType() {
+    var txn = txnEl ? txnEl.value : 'trade';
+    var rentalEl = document.getElementById('rental-fields');
+    var tradeEl  = document.getElementById('trade-logistics');
+    var lbl      = document.getElementById('want-text-label');
+    if (rentalEl) rentalEl.style.display = txn === 'rental' ? '' : 'none';
+    if (tradeEl)  tradeEl.style.display  = txn === 'rental' ? 'none' : '';
+    if (lbl) lbl.innerHTML = txn === 'rental'
+      ? 'What payment do you want for rental? <span class="req">*</span>'
+      : 'What do you want in exchange? <span class="req">*</span>';
+  }
+
+  function refreshBehaviour() {
+    var b = behaviourEl ? behaviourEl.value : '';
+    var dg = document.getElementById('duration-group');
+    if (dg) dg.style.display = b === 'temporary' ? '' : 'none';
+  }
+
+  function refreshWarranty() {
+    var wg = document.getElementById('warranty-duration-group');
+    if (wg) wg.style.display = (warrantyEl && warrantyEl.checked) ? '' : 'none';
+  }
+
+  function refreshDeposit() {
+    var dg = document.getElementById('deposit-desc-group');
+    if (dg) dg.style.display = (depositEl && depositEl.checked) ? '' : 'none';
+  }
+
+  if (catEl)      catEl.addEventListener('change', function() { refreshSubcategory(''); });
+  if (typeEl)     typeEl.addEventListener('change', refreshListingType);
+  if (txnEl)      txnEl.addEventListener('change', refreshTransactionType);
+  if (behaviourEl) behaviourEl.addEventListener('change', refreshBehaviour);
+  if (warrantyEl) warrantyEl.addEventListener('change', refreshWarranty);
+  if (depositEl)  depositEl.addEventListener('change', refreshDeposit);
+
+  if (catEl && catEl.value) refreshSubcategory(initialSub);
+  refreshListingType();
+  refreshTransactionType();
+  refreshBehaviour();
+  refreshWarranty();
+  refreshDeposit();
 })();
+
+function updatePhotoLabel(input) {
+  var label   = document.getElementById('photo-label');
+  var preview = document.getElementById('photo-preview');
+  var files   = Array.from(input.files).slice(0, 3);
+  label.textContent = files.length > 0
+    ? files.length + ' photo' + (files.length > 1 ? 's' : '') + ' selected'
+    : 'Tap to upload 1–3 photos';
+  preview.innerHTML = '';
+  files.forEach(function(f) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = document.createElement('img');
+      img.src = e.target.result;
+      img.style.cssText = 'width:72px; height:72px; object-fit:cover; border-radius:8px; border:1px solid var(--border-soft);';
+      preview.appendChild(img);
+    };
+    reader.readAsDataURL(f);
+  });
+}
 </script>
 {% endblock %}

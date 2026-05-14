@@ -1,0 +1,50 @@
+{% extends "core/base.html" %}
+{% block title %}Enter Verification Code – Sesika{% endblock %}
+
+{% block content %}
+<div style="max-width:440px; margin:0 auto;">
+  <div style="margin-bottom:16px;">
+    <a href="{% url 'student_verify_request' %}" class="btn btn-secondary btn-sm">← Back</a>
+  </div>
+
+  <h1 class="page-title">🎓 Enter your code</h1>
+  <p style="color:var(--text-2); margin-bottom:20px; font-size:0.93rem;">
+    We sent a 6-digit code to <strong>{{ email }}</strong>. Check your inbox (and spam folder).
+  </p>
+
+  <div class="form-card">
+    {% if error %}
+      <div style="background:#fce5e2; border:1px solid #fca5a5; border-radius:10px; padding:12px 14px; margin-bottom:14px; font-size:0.88rem; color:var(--danger);">
+        {{ error }}
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <div class="form-group">
+        <label class="form-label" for="code">Verification code <span class="req">*</span></label>
+        <input type="text" name="code" id="code"
+               placeholder="6-digit code"
+               inputmode="numeric"
+               maxlength="6"
+               autocomplete="one-time-code"
+               autofocus
+               style="font-size:1.4rem; letter-spacing:0.2em; text-align:center;">
+      </div>
+
+      <div class="form-actions" style="justify-content:flex-end;">
+        <button type="submit" class="btn btn-primary btn-lg">
+          Verify
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5L16 12L9 19"/></svg>
+        </button>
+      </div>
+    </form>
+
+    <p style="font-size:0.82rem; color:var(--text-3); margin-top:16px; text-align:center;">
+      Didn't receive it?
+      <a href="{% url 'student_verify_request' %}" style="color:var(--green);">Resend</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

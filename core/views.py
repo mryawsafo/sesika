@@ -1,25 +1,34 @@
 import json
 import logging
+import random
+import string
 import uuid
 from decimal import Decimal
-from django.db.models import Count
+from django.db.models import Count, Avg
 
 logger = logging.getLogger(__name__)
 
 import requests as http_client
 from django.conf import settings
+from django.core.mail import send_mail
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .models import (
-    BarterUser, Listing, Offer, CategoryBaseline, CONDITION_MULTIPLIERS,
+    BarterUser, Listing, ListingPhoto, Offer, CategoryBaseline, CONDITION_MULTIPLIERS,
     CATEGORY_CHOICES, SUBCATEGORY_CHOICES, SavedListing, WishlistItem,
     Notification, match_listing_to_wishlists, match_want_text_to_listings,
-    count_wishlist_demand, DeviceToken, LoginAttempt,
+    count_wishlist_demand, DeviceToken, LoginAttempt, UniversityDomain,
+    CampusGroup, CampusMembership, TradeRating, enrich_listing_with_ai,
+    validate_and_correct_listing_category, SiteSettings,
 )
-from .forms import LoginForm, ListingForm, OfferForm, WishlistItemForm
+from .forms import (
+    LoginForm, ListingForm, OfferForm, WishlistItemForm, ProfileForm,
+    CounterOfferForm,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -27,7 +36,6 @@ from .forms import LoginForm, ListingForm, OfferForm, WishlistItemForm
 # ---------------------------------------------------------------------------
 
 def get_current_user(request):
-    """Return BarterUser from session, or None."""
     user_id = request.session.get('barter_user_id')
     if user_id:
         try:
@@ -38,7 +46,6 @@ def get_current_user(request):
 
 
 def post_login_redirect(user):
-    """Return the redirect target after a successful login."""
     if not user.name:
         return 'complete_profile'
     return 'home'
@@ -52,7 +59,6 @@ def get_client_ip(request):
 
 
 def login_required_barter(view_fn):
-    """Decorator: redirect to login if no session user."""
     def wrapper(request, *args, **kwargs):
         if not get_current_user(request):
             messages.warning(request, 'Please log in first.')
@@ -63,7 +69,6 @@ def login_required_barter(view_fn):
 
 
 def verified_required(view_fn):
-    """Decorator: redirect to OTP page if this device is not verified."""
     def wrapper(request, *args, **kwargs):
         user = get_current_user(request)
         if not user:
@@ -75,6 +80,18 @@ def verified_required(view_fn):
         return view_fn(request, *args, **kwargs)
     wrapper.__name__ = view_fn.__name__
     return wrapper
+
+
+def _generate_otp(length=6):
+    return ''.join(random.choices(string.digits, k=length))
+
+
+def _should_reveal_contact(offer):
+    """Return True if the offer sender's contact should be visible given listing owner's preference."""
+    pref = offer.to_user.contact_reveal_preference
+    if pref == 'on_any_offer':
+        return True
+    return offer.status == 'accepted'
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +113,6 @@ def login_view(request):
             request.session['barter_user_id'] = user.pk
             LoginAttempt.objects.create(phone=phone, ip_address=ip, user_agent=ua, success=True)
 
-            # Already verified — trust them and set session flag
             if user.is_verified:
                 request.session['device_verified'] = True
                 messages.success(request, f'Welcome back, {user.name or user.phone}!')
@@ -223,36 +239,131 @@ def complete_profile(request):
     error = None
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
-        location = request.POST.get('location', '').strip()
+        region = request.POST.get('location_region', '').strip()
+        city = request.POST.get('location_city', '').strip()
         if not name:
             error = 'Please enter your name.'
         else:
             user.name = name
-            if location:
-                user.location = location
+            user.location_region = region
+            user.location_city = city
             user.save()
             return redirect('home')
 
-    return render(request, 'core/complete_profile.html', {'user': user, 'error': error})
+    from .models import GHANA_REGION_CHOICES
+    return render(request, 'core/complete_profile.html', {
+        'user': user,
+        'error': error,
+        'region_choices': GHANA_REGION_CHOICES,
+    })
 
 
 @login_required_barter
 def update_profile(request):
     user = get_current_user(request)
-    if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        location = request.POST.get('location', '').strip()
-        whatsapp = request.POST.get('whatsapp_number', '').strip()
-        if name:
-            user.name = name
-        if location:
-            user.location = location
-        if whatsapp:
-            user.whatsapp_number = whatsapp
-        user.save()
+    form = ProfileForm(request.POST or None, instance=user)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
         messages.success(request, 'Profile updated.')
-        return redirect('home')
-    return render(request, 'core/profile.html', {'barter_user': user})
+        return redirect('profile')
+    avg_rating = TradeRating.objects.filter(rated_user=user).aggregate(avg=Avg('score'))['avg']
+    return render(request, 'core/profile.html', {
+        'barter_user': user,
+        'form': form,
+        'avg_rating': avg_rating,
+        'ratings': TradeRating.objects.filter(rated_user=user).select_related('rater').order_by('-created_at')[:10],
+    })
+
+
+# ---------------------------------------------------------------------------
+# Student email verification
+# ---------------------------------------------------------------------------
+
+@login_required_barter
+def student_verify_request(request):
+    user = get_current_user(request)
+    error = None
+
+    if request.method == 'POST':
+        email = request.POST.get('student_email', '').strip().lower()
+        if not email:
+            error = 'Please enter your university email address.'
+        else:
+            domain = email.split('@')[-1] if '@' in email else ''
+            if not UniversityDomain.objects.filter(domain=domain, is_active=True).exists():
+                error = (
+                    f'"{domain}" is not a recognised university domain. '
+                    'If your university is missing, please contact us.'
+                )
+            else:
+                otp = _generate_otp()
+                request.session['student_otp'] = otp
+                request.session['student_email_pending'] = email
+                try:
+                    send_mail(
+                        subject='Sesika — Verify your student email',
+                        message=(
+                            f'Your Sesika student verification code is: {otp}\n\n'
+                            'This code expires in 10 minutes. Do not share it.'
+                        ),
+                        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@sesika.gh'),
+                        recipient_list=[email],
+                        fail_silently=False,
+                    )
+                    return redirect('student_verify_confirm')
+                except Exception as e:
+                    logger.error("Student email OTP send failed: %s", e)
+                    error = 'Could not send verification email. Please try again.'
+
+    domains = UniversityDomain.objects.filter(is_active=True).order_by('university_name')
+    return render(request, 'core/student_verify.html', {
+        'user': user,
+        'error': error,
+        'domains': domains,
+    })
+
+
+@login_required_barter
+def student_verify_confirm(request):
+    user = get_current_user(request)
+    email = request.session.get('student_email_pending')
+    if not email:
+        return redirect('student_verify_request')
+
+    error = None
+    if request.method == 'POST':
+        code = request.POST.get('code', '').strip()
+        expected = request.session.get('student_otp')
+        if not code or code != expected:
+            error = 'Incorrect code. Please try again.'
+        else:
+            user.student_email = email
+            user.is_student_verified = True
+            user.student_verified_at = timezone.now()
+            user.save(update_fields=['student_email', 'is_student_verified', 'student_verified_at'])
+            for key in ('student_otp', 'student_email_pending'):
+                request.session.pop(key, None)
+
+            domain = email.split('@')[-1]
+            uni_domain = UniversityDomain.objects.filter(domain=domain).first()
+            if uni_domain:
+                for group in uni_domain.campus_groups.filter(is_active=True):
+                    CampusMembership.objects.get_or_create(user=user, group=group)
+
+            Notification.objects.create(
+                user=user,
+                type='student_verified',
+                message=f'Student email verified: {email}. You now have a Student badge.',
+                link='/profile/',
+            )
+            messages.success(request, '✅ Student email verified! Your Student badge is now active.')
+            return redirect('profile')
+
+    return render(request, 'core/student_verify_confirm.html', {
+        'user': user,
+        'email': email,
+        'error': error,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -260,10 +371,17 @@ def update_profile(request):
 # ---------------------------------------------------------------------------
 
 def home(request):
-    listings = Listing.objects.filter(status='active').select_related('user')
+    listings = Listing.objects.filter(status='active').select_related('user').prefetch_related('photos')
     category_filter = request.GET.get('category', '')
+    transaction_filter = request.GET.get('type', '')
+    region_filter = request.GET.get('region', '')
+
     if category_filter:
         listings = listings.filter(category=category_filter)
+    if transaction_filter in ('trade', 'rental'):
+        listings = listings.filter(transaction_type=transaction_filter)
+    if region_filter:
+        listings = listings.filter(location_region=region_filter)
 
     current_user = get_current_user(request)
     saved_pks = set()
@@ -273,10 +391,14 @@ def home(request):
             .values_list('listing_id', flat=True)
         )
 
+    from .models import GHANA_REGION_CHOICES
     return render(request, 'core/home.html', {
         'listings': listings,
         'category_choices': CATEGORY_CHOICES,
+        'region_choices': GHANA_REGION_CHOICES,
         'selected_category': category_filter,
+        'selected_type': transaction_filter,
+        'selected_region': region_filter,
         'saved_pks': saved_pks,
     })
 
@@ -294,13 +416,22 @@ def listing_detail(request, pk):
         is_saved = SavedListing.objects.filter(user=current_user, listing=listing).exists()
 
     demand_count = count_wishlist_demand(listing)
+    photos = listing.all_photos
+
+    show_ai = (
+        listing.ai_enrichment
+        and not listing.ai_enrichment_hidden
+    )
 
     return render(request, 'core/listing_detail.html', {
         'listing': listing,
+        'photos': photos,
         'user_offer': user_offer,
         'is_owner': current_user and current_user.pk == listing.user.pk,
         'is_saved': is_saved,
         'demand_count': demand_count,
+        'show_ai': show_ai,
+        'contact_revealed': user_offer and _should_reveal_contact(user_offer),
     })
 
 
@@ -309,15 +440,41 @@ def listing_create(request):
     user = get_current_user(request)
     if not user.name:
         return redirect('complete_profile')
+
+    # Wishlist gate: must have at least 3 active wishlist items before first listing
+    wishlist_count = WishlistItem.objects.filter(user=user, is_active=True).count()
+    existing_listings = Listing.objects.filter(user=user).exists()
+    if not existing_listings and wishlist_count < 3:
+        messages.info(
+            request,
+            f'Before listing your first item, please add at least 3 items to your wishlist '
+            f'({wishlist_count}/3 added). This helps us find matches for you!'
+        )
+        return redirect('wishlist_create')
+
     form = ListingForm(request.POST or None, request.FILES or None)
 
     if request.method == 'POST' and form.is_valid():
         listing = form.save(commit=False)
         listing.user = user
         listing.save()
+
+        # Handle photos (min 1 required)
+        photo_files = request.FILES.getlist('photos')
+        if not photo_files:
+            form.add_error('photos', 'Please upload at least 1 photo.')
+            listing.delete()
+            return render(request, 'core/listing_form.html', {
+                'form': form,
+                'action': 'Create',
+                'subcategory_choices_json': json.dumps(SUBCATEGORY_CHOICES),
+            })
+
+        for i, photo_file in enumerate(photo_files[:3], start=1):
+            ListingPhoto.objects.create(listing=listing, image=photo_file, order=i)
+
         listing.compute_and_save_value()
 
-        # Pre-approval: notify seller of potential demand immediately
         demand_count = count_wishlist_demand(listing)
         if demand_count > 0:
             person_word = 'person' if demand_count == 1 else 'people'
@@ -353,6 +510,13 @@ def listing_edit(request, pk):
     if request.method == 'POST' and form.is_valid():
         listing = form.save(commit=False)
         listing.save()
+
+        new_photos = request.FILES.getlist('photos')
+        if new_photos:
+            listing.photos.all().delete()
+            for i, photo_file in enumerate(new_photos[:3], start=1):
+                ListingPhoto.objects.create(listing=listing, image=photo_file, order=i)
+
         listing.compute_and_save_value()
         messages.success(request, 'Listing updated.')
         return redirect('listing_detail', pk=listing.pk)
@@ -361,6 +525,7 @@ def listing_edit(request, pk):
         'form': form,
         'action': 'Edit',
         'listing': listing,
+        'existing_photos': listing.all_photos,
         'subcategory_choices_json': json.dumps(SUBCATEGORY_CHOICES),
     })
 
@@ -380,6 +545,56 @@ def listing_delete(request, pk):
     return redirect('home')
 
 
+@verified_required
+@require_POST
+def listing_pause_toggle(request, pk):
+    listing = get_object_or_404(Listing, pk=pk)
+    user = get_current_user(request)
+
+    if listing.user.pk != user.pk:
+        messages.error(request, 'You can only manage your own listings.')
+        return redirect('listing_detail', pk=pk)
+
+    if listing.status == 'active':
+        listing.status = 'paused'
+        listing.save(update_fields=['status'])
+        messages.info(request, 'Listing paused. It won\'t appear in matches until you resume it.')
+    elif listing.status == 'paused':
+        listing.status = 'active'
+        listing.save(update_fields=['status'])
+        messages.success(request, 'Listing resumed.')
+
+    return redirect('listing_detail', pk=pk)
+
+
+# ---------------------------------------------------------------------------
+# AI enrichment actions (user-facing)
+# ---------------------------------------------------------------------------
+
+@login_required_barter
+@require_POST
+def listing_ai_hide(request, pk):
+    listing = get_object_or_404(Listing, pk=pk)
+    user = get_current_user(request)
+    if listing.user.pk != user.pk:
+        return JsonResponse({'error': 'Forbidden'}, status=403)
+    listing.ai_enrichment_hidden = True
+    listing.save(update_fields=['ai_enrichment_hidden'])
+    return JsonResponse({'status': 'hidden'})
+
+
+@login_required_barter
+@require_POST
+def listing_ai_flag(request, pk):
+    listing = get_object_or_404(Listing, pk=pk)
+    user = get_current_user(request)
+    if listing.user.pk != user.pk:
+        return JsonResponse({'error': 'Forbidden'}, status=403)
+    listing.ai_enrichment_flagged = True
+    listing.save(update_fields=['ai_enrichment_flagged'])
+    return JsonResponse({'status': 'flagged'})
+
+
 # ---------------------------------------------------------------------------
 # Offer views
 # ---------------------------------------------------------------------------
@@ -393,7 +608,6 @@ def offer_create(request, listing_pk):
         messages.error(request, 'You cannot make an offer on your own listing.')
         return redirect('listing_detail', pk=listing_pk)
 
-    # Compute suggestion for display before form submission
     target_value = listing.final_estimated_value or listing.user_estimated_value
     suggested_min = (target_value * Decimal('0.8')).quantize(Decimal('0.01'))
     suggested_max = (target_value * Decimal('1.2')).quantize(Decimal('0.01'))
@@ -408,17 +622,30 @@ def offer_create(request, listing_pk):
             from_user=user,
             to_user=listing.user,
             listing=listing,
+            offer_type=listing.transaction_type,
             offered_item_description=form.cleaned_data.get('offered_item_description', ''),
             cash_topup=cash_topup,
             message=form.cleaned_data.get('message', ''),
+            rental_start_date=form.cleaned_data.get('rental_start_date'),
+            rental_end_date=form.cleaned_data.get('rental_end_date'),
+            rental_payment_offered=form.cleaned_data.get('rental_payment_offered', ''),
         )
         offer.compute_suggested_topup(offered_value + cash_topup)
+
+        if listing.user.contact_reveal_preference == 'on_any_offer':
+            offer.contact_revealed = True
+
         offer.save()
 
-        messages.success(
-            request,
-            '🎉 Offer submitted! The seller\'s WhatsApp contact is now unlocked.'
+        Notification.objects.create(
+            user=listing.user,
+            type='offer_received',
+            message=f'You have a new offer on "{listing.title}" from {user.name or user.phone}.',
+            link=f'/my/offers/',
+            source_listing=listing,
         )
+
+        messages.success(request, '🎉 Offer submitted!')
         return redirect('offer_success', offer_pk=offer.pk)
 
     return render(request, 'core/offer_form.html', {
@@ -439,27 +666,17 @@ def offer_success(request, offer_pk):
         messages.error(request, 'Access denied.')
         return redirect('home')
 
-    # Mark contact as revealed
-    if not offer.contact_revealed:
-        offer.contact_revealed = True
-        offer.save()
+    contact_revealed = _should_reveal_contact(offer)
+    whatsapp_link = offer.whatsapp_link() if contact_revealed else None
 
-    whatsapp_link = offer.whatsapp_link()
     return render(request, 'core/offer_success.html', {
         'offer': offer,
+        'contact_revealed': contact_revealed,
         'whatsapp_link': whatsapp_link,
     })
 
 
-# ---------------------------------------------------------------------------
-# Offer suggest (AJAX / form helper)
-# ---------------------------------------------------------------------------
-
 def offer_suggest(request):
-    """
-    GET ?listing_id=X&offered_value=Y
-    Returns JSON with suggested min/max cash top-up.
-    """
     listing_id = request.GET.get('listing_id')
     offered_value_raw = request.GET.get('offered_value', '0')
 
@@ -492,7 +709,7 @@ def offer_suggest(request):
 @login_required_barter
 def my_listings(request):
     user = get_current_user(request)
-    listings = Listing.objects.filter(user=user).order_by('-created_at')
+    listings = Listing.objects.filter(user=user).order_by('-created_at').prefetch_related('photos')
     return render(request, 'core/my_listings.html', {'listings': listings})
 
 
@@ -500,7 +717,10 @@ def my_listings(request):
 @require_POST
 def offer_update_status(request, offer_pk):
     user = get_current_user(request)
-    offer = get_object_or_404(Offer, pk=offer_pk, to_user=user)
+    offer = get_object_or_404(Offer, pk=offer_pk)
+    if offer.to_user.pk != user.pk and offer.from_user.pk != user.pk:
+        messages.error(request, 'Access denied.')
+        return redirect('my_offers')
     action = request.POST.get('action')
 
     if offer.status == 'pending':
@@ -509,7 +729,7 @@ def offer_update_status(request, offer_pk):
             offer.contact_revealed = True
             offer.save()
             offer.listing.status = 'traded'
-            offer.listing.save()
+            offer.listing.save(update_fields=['status'])
             messages.success(request, f'Offer accepted. {offer.from_user.name or offer.from_user.phone} can now contact you.')
             Notification.objects.create(
                 user=offer.from_user,
@@ -517,9 +737,10 @@ def offer_update_status(request, offer_pk):
                 message=f'Your offer on "{offer.listing.title}" was accepted! Contact the seller.',
                 link=f'/offers/{offer.pk}/success/',
             )
+
         elif action == 'reject':
             offer.status = 'rejected'
-            offer.save()
+            offer.save(update_fields=['status'])
             messages.info(request, 'Offer rejected.')
             Notification.objects.create(
                 user=offer.from_user,
@@ -528,18 +749,108 @@ def offer_update_status(request, offer_pk):
                 link=f'/listings/{offer.listing.pk}/',
             )
 
+        elif action == 'counter':
+            form = CounterOfferForm(request.POST)
+            if form.is_valid():
+                offer.status = 'countered'
+                offer.counter_cash_topup = form.cleaned_data['counter_cash_topup']
+                offer.counter_message = form.cleaned_data.get('counter_message', '')
+                offer.save(update_fields=['status', 'counter_cash_topup', 'counter_message'])
+                messages.info(request, 'Counteroffer sent.')
+                Notification.objects.create(
+                    user=offer.from_user,
+                    type='offer_countered',
+                    message=(
+                        f'"{offer.listing.title}": the seller has sent a counteroffer requesting '
+                        f'GHS {offer.counter_cash_topup:.0f} top-up.'
+                    ),
+                    link='/my/offers/',
+                    source_listing=offer.listing,
+                )
+
+    elif offer.status == 'countered' and offer.from_user.pk == user.pk:
+        if action == 'accept_counter':
+            offer.status = 'accepted'
+            offer.contact_revealed = True
+            offer.save(update_fields=['status', 'contact_revealed'])
+            offer.listing.status = 'traded'
+            offer.listing.save(update_fields=['status'])
+            messages.success(request, 'Counteroffer accepted. Trade confirmed!')
+            Notification.objects.create(
+                user=offer.to_user,
+                type='offer_accepted',
+                message=f'{offer.from_user.name or offer.from_user.phone} accepted your counteroffer on "{offer.listing.title}".',
+                link='/my/offers/',
+            )
+
+        elif action == 'reject_counter':
+            offer.status = 'rejected'
+            offer.save(update_fields=['status'])
+            messages.info(request, 'Counteroffer declined.')
+            Notification.objects.create(
+                user=offer.to_user,
+                type='offer_rejected',
+                message=f'{offer.from_user.name or offer.from_user.phone} declined your counteroffer on "{offer.listing.title}".',
+                link='/my/offers/',
+            )
+
     return redirect('my_offers')
 
 
 @login_required_barter
 def my_offers(request):
     user = get_current_user(request)
-    offers_made = Offer.objects.filter(from_user=user).select_related('listing', 'to_user')
-    offers_received = Offer.objects.filter(to_user=user).select_related('listing', 'from_user')
+    offers_made = Offer.objects.filter(from_user=user).select_related('listing', 'to_user').prefetch_related('listing__photos')
+    offers_received = Offer.objects.filter(to_user=user).select_related('listing', 'from_user').prefetch_related('listing__photos')
+    counter_form = CounterOfferForm()
     return render(request, 'core/my_offers.html', {
         'offers_made': offers_made,
         'offers_received': offers_received,
+        'counter_form': counter_form,
     })
+
+
+# ---------------------------------------------------------------------------
+# Trade completion and ratings
+# ---------------------------------------------------------------------------
+
+@login_required_barter
+@require_POST
+def trade_complete(request, offer_pk):
+    user = get_current_user(request)
+    offer = get_object_or_404(Offer, pk=offer_pk, status='accepted')
+
+    if offer.from_user.pk != user.pk and offer.to_user.pk != user.pk:
+        messages.error(request, 'Access denied.')
+        return redirect('my_offers')
+
+    other_user = offer.to_user if offer.from_user.pk == user.pk else offer.from_user
+    score = int(request.POST.get('score', 0))
+    comment = request.POST.get('comment', '').strip()
+
+    if score < 1 or score > 5:
+        messages.error(request, 'Please select a rating from 1 to 5.')
+        return redirect('my_offers')
+
+    rating, created = TradeRating.objects.get_or_create(
+        rater=user,
+        offer=offer,
+        defaults={'rated_user': other_user, 'score': score, 'comment': comment},
+    )
+    if not created:
+        messages.info(request, 'You have already rated this trade.')
+        return redirect('my_offers')
+
+    Notification.objects.create(
+        user=other_user,
+        type='rating_received',
+        message=f'{user.name or user.phone} left you a {score}/5 rating for the "{offer.listing.title}" trade.',
+        link='/profile/',
+    )
+    offer.listing.status = 'traded'
+    offer.listing.save(update_fields=['status'])
+    messages.success(request, '⭐ Trade rated. Thank you!')
+    return redirect('my_offers')
 
 
 # ---------------------------------------------------------------------------
@@ -567,7 +878,7 @@ def listing_save_toggle(request, pk):
 @login_required_barter
 def my_saved(request):
     user = get_current_user(request)
-    saved_listings = SavedListing.objects.filter(user=user).select_related('listing', 'listing__user')
+    saved_listings = SavedListing.objects.filter(user=user).select_related('listing', 'listing__user').prefetch_related('listing__photos')
     return render(request, 'core/my_saved.html', {'saved_listings': saved_listings})
 
 
@@ -587,6 +898,7 @@ def my_wishlist(request):
     return render(request, 'core/my_wishlist.html', {
         'wishlist_items': wishlist_items,
         'total_matches': total_matches,
+        'has_enough': wishlist_items.count() >= 3,
     })
 
 
@@ -599,6 +911,11 @@ def wishlist_create(request):
         item.user = user
         item.save()
         messages.success(request, 'Added to your wishlist.')
+
+        wishlist_count = WishlistItem.objects.filter(user=user, is_active=True).count()
+        if wishlist_count < 3:
+            messages.info(request, f'Add {3 - wishlist_count} more item(s) to unlock listing.')
+            return redirect('wishlist_create')
         return redirect('my_wishlist')
     return render(request, 'core/wishlist_form.html', {'form': form})
 
@@ -621,8 +938,23 @@ def wishlist_delete(request, pk):
     user = get_current_user(request)
     item = get_object_or_404(WishlistItem, pk=pk, user=user)
     item.is_active = False
-    item.save()
+    item.save(update_fields=['is_active'])
     messages.info(request, 'Removed from wishlist.')
+    return redirect('my_wishlist')
+
+
+@login_required_barter
+@require_POST
+def wishlist_renew(request, pk):
+    """Reset expiry on a wishlist item for another full cycle."""
+    user = get_current_user(request)
+    item = get_object_or_404(WishlistItem, pk=pk, user=user)
+    from datetime import timedelta
+    days = SiteSettings.get().wishlist_default_expiry_days
+    item.expires_at = timezone.now() + timedelta(days=days)
+    item.is_active = True
+    item.save(update_fields=['expires_at', 'is_active'])
+    messages.success(request, f'Wishlist item renewed for {days} more days.')
     return redirect('my_wishlist')
 
 
@@ -640,7 +972,6 @@ def notifications_view(request):
 
 @login_required_barter
 def notification_click(request, pk):
-    from django.utils import timezone
     user = get_current_user(request)
     notif = get_object_or_404(Notification, pk=pk, user=user)
     if not notif.clicked_at:
@@ -650,3 +981,15 @@ def notification_click(request, pk):
     if notif.link:
         return redirect(notif.link)
     return redirect('notifications')
+
+
+# ---------------------------------------------------------------------------
+# Static pages
+# ---------------------------------------------------------------------------
+
+def about(request):
+    return render(request, 'core/about.html')
+
+
+def privacy(request):
+    return render(request, 'core/privacy.html')
