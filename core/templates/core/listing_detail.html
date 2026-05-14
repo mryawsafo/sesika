@@ -300,6 +300,21 @@
   </aside>
 </div>
 
+{% if is_owner and wishlist_count < 3 %}
+<div style="background:#fffbeb; border:1px solid #fcd34d; border-radius:12px; padding:16px 18px; margin-top:20px; display:flex; gap:14px; align-items:flex-start;">
+  <div style="font-size:1.4rem; line-height:1;">💡</div>
+  <div style="flex:1;">
+    <div style="font-weight:700; font-size:0.95rem; margin-bottom:4px;">Tell us what you're looking for</div>
+    <p style="font-size:0.87rem; color:var(--text-2); margin:0 0 10px;">
+      Your wishlist helps us match you with people who have what you want.
+      You've added <strong>{{ wishlist_count }}</strong> item{{ wishlist_count|pluralize }} — add a few more to unlock better matches.
+    </p>
+    <a href="{% url 'wishlist_create' %}" class="btn btn-primary btn-sm">Add to wishlist →</a>
+    <a href="{% url 'my_wishlist' %}" class="btn btn-secondary btn-sm" style="margin-left:6px;">View wishlist</a>
+  </div>
+</div>
+{% endif %}
+
 {% if is_owner %}
 <script>
 function hideAI(pk) {

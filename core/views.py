@@ -430,21 +430,27 @@ def listing_detail(request, pk):
 
     demand_count = count_wishlist_demand(listing)
     photos = listing.all_photos
+    is_owner = current_user and current_user.pk == listing.user.pk
 
     show_ai = (
         listing.ai_enrichment
         and not listing.ai_enrichment_hidden
     )
 
+    wishlist_count = 0
+    if is_owner:
+        wishlist_count = WishlistItem.objects.filter(user=current_user, is_active=True).count()
+
     return render(request, 'core/listing_detail.html', {
         'listing': listing,
         'photos': photos,
         'user_offer': user_offer,
-        'is_owner': current_user and current_user.pk == listing.user.pk,
+        'is_owner': is_owner,
         'is_saved': is_saved,
         'demand_count': demand_count,
         'show_ai': show_ai,
         'contact_revealed': user_offer and _should_reveal_contact(user_offer),
+        'wishlist_count': wishlist_count,
     })
 
 
@@ -453,17 +459,6 @@ def listing_create(request):
     user = get_current_user(request)
     if not user.name:
         return redirect('complete_profile')
-
-    # Wishlist gate: must have at least 3 active wishlist items before first listing
-    wishlist_count = WishlistItem.objects.filter(user=user, is_active=True).count()
-    existing_listings = Listing.objects.filter(user=user).exists()
-    if not existing_listings and wishlist_count < 3:
-        messages.info(
-            request,
-            f'Before listing your first item, please add at least 3 items to your wishlist '
-            f'({wishlist_count}/3 added). This helps us find matches for you!'
-        )
-        return redirect('wishlist_create')
 
     form = ListingForm(request.POST or None, request.FILES or None)
 
@@ -927,11 +922,6 @@ def wishlist_create(request):
         item.user = user
         item.save()
         messages.success(request, 'Added to your wishlist.')
-
-        wishlist_count = WishlistItem.objects.filter(user=user, is_active=True).count()
-        if wishlist_count < 3:
-            messages.info(request, f'Add {3 - wishlist_count} more item(s) to unlock listing.')
-            return redirect('wishlist_create')
         return redirect('my_wishlist')
     return render(request, 'core/wishlist_form.html', {'form': form})
 
