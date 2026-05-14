@@ -51,4 +51,7 @@ urlpatterns = [
     # Static pages
     path('about/', views.about, name='about'),
     path('privacy/', views.privacy, name='privacy'),
+
+    # Admin tools
+    path('admin-tools/seed/', views.admin_seed_listing, name='admin_seed_listing'),
 ]

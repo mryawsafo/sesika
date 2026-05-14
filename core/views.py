@@ -993,3 +993,89 @@ def about(request):
 
 def privacy(request):
     return render(request, 'core/privacy.html')
+
+
+# ---------------------------------------------------------------------------
+# Admin seeding tool
+# ---------------------------------------------------------------------------
+
+def admin_seed_listing(request):
+    if not request.user.is_staff:
+        return redirect('/admin/login/?next=/admin-tools/seed/')
+
+    from .models import (
+        CATEGORY_CHOICES, CONDITION_CHOICES, GHANA_REGION_CHOICES,
+        TRANSACTION_TYPE_CHOICES, LISTING_TYPE_CHOICES,
+    )
+
+    success = None
+    error = None
+    created_listing = None
+
+    if request.method == 'POST':
+        phone_raw = request.POST.get('phone', '').strip().replace(' ', '').replace('-', '')
+        if phone_raw.startswith('0') and len(phone_raw) == 10:
+            phone = f'+233{phone_raw[1:]}'
+        elif phone_raw.startswith('+233'):
+            phone = phone_raw
+        elif phone_raw.startswith('233'):
+            phone = f'+{phone_raw}'
+        else:
+            phone = phone_raw
+
+        name  = request.POST.get('name', '').strip()
+        title = request.POST.get('title', '').strip()
+
+        if not phone or not title:
+            error = 'Phone number and title are required.'
+        else:
+            user, _ = BarterUser.objects.get_or_create(
+                phone=phone,
+                defaults={'name': name, 'is_verified': True},
+            )
+            if name and not user.name:
+                user.name = name
+                user.save(update_fields=['name'])
+
+            listing = Listing(
+                user=user,
+                title=title,
+                transaction_type=request.POST.get('transaction_type', 'trade'),
+                listing_type=request.POST.get('listing_type', 'physical'),
+                category=request.POST.get('category', 'other'),
+                subcategory=request.POST.get('subcategory', ''),
+                condition=request.POST.get('condition', 'good'),
+                description=request.POST.get('description', ''),
+                want_text=request.POST.get('want_text', ''),
+                user_estimated_value=request.POST.get('user_estimated_value') or 0,
+                location_region=request.POST.get('location_region', ''),
+                location_city=request.POST.get('location_city', ''),
+                location_neighbourhood=request.POST.get('location_neighbourhood', ''),
+                brand=request.POST.get('brand', ''),
+                model_name=request.POST.get('model_name', ''),
+                size=request.POST.get('size', ''),
+                colour=request.POST.get('colour', ''),
+                listing_behaviour='permanent',
+                status='active',
+            )
+            listing.save()
+
+            photo_files = request.FILES.getlist('photos')
+            for i, f in enumerate(photo_files[:3], start=1):
+                ListingPhoto.objects.create(listing=listing, image=f, order=i)
+
+            listing.compute_and_save_value()
+            created_listing = listing
+            success = f'Listing "{listing.title}" created for {user.name or user.phone} (pk={listing.pk})'
+
+    return render(request, 'core/admin_seed_listing.html', {
+        'success': success,
+        'error': error,
+        'created_listing': created_listing,
+        'category_choices': CATEGORY_CHOICES,
+        'condition_choices': CONDITION_CHOICES,
+        'region_choices': GHANA_REGION_CHOICES,
+        'transaction_type_choices': TRANSACTION_TYPE_CHOICES,
+        'listing_type_choices': LISTING_TYPE_CHOICES,
+        'subcategory_choices_json': json.dumps(SUBCATEGORY_CHOICES),
+    })
