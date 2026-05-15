@@ -478,21 +478,15 @@ class Subcategory(models.Model):
 # DB-driven category cache helpers
 # ---------------------------------------------------------------------------
 
-_category_cache = None
-
-
 def get_active_categories():
-    global _category_cache
-    if _category_cache is None:
-        try:
-            _category_cache = list(
-                Category.objects.filter(is_active=True)
-                .values_list('slug', 'label')
-                .order_by('display_order', 'label')
-            )
-        except Exception:
-            _category_cache = CATEGORY_CHOICES
-    return _category_cache
+    try:
+        return list(
+            Category.objects.filter(is_active=True)
+            .values_list('slug', 'label')
+            .order_by('display_order', 'label')
+        )
+    except Exception:
+        return list(CATEGORY_CHOICES)
 
 
 def get_subcategory_map():
@@ -507,12 +501,11 @@ def get_subcategory_map():
             result[sub.category.slug].append((sub.slug, sub.label))
         return dict(result)
     except Exception:
-        return SUBCATEGORY_CHOICES
+        return dict(SUBCATEGORY_CHOICES)
 
 
 def invalidate_category_cache():
-    global _category_cache
-    _category_cache = None
+    pass
 
 
 # ---------------------------------------------------------------------------

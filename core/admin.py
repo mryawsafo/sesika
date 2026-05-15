@@ -195,7 +195,7 @@ class ListingAdmin(admin.ModelAdmin):
         pretty = json.dumps(obj.ai_enrichment, indent=2)
         return format_html('<pre style="font-size:0.8em; max-height:200px; overflow:auto;">{}</pre>', pretty)
 
-    actions = ['approve_listings', 'create_suggested_category_and_approve', 'reject_listings', 'fetch_images', 'clear_ai_flag']
+    actions = ['approve_listings', 'reject_listings', 'fetch_images', 'clear_ai_flag']
 
     @admin.action(description='✅ Approve selected listings')
     def approve_listings(self, request, queryset):
@@ -204,8 +204,29 @@ class ListingAdmin(admin.ModelAdmin):
 
         corrections = []
         enriched = 0
+        new_cats = []
         for listing in to_approve:
             listing.refresh_from_db()
+
+            if listing.category == 'other' and listing.suggested_category:
+                cat_slug = slugify(listing.suggested_category)[:50]
+                cat, _ = Category.objects.get_or_create(
+                    slug=cat_slug,
+                    defaults={'label': listing.suggested_category, 'display_order': 99},
+                )
+                listing.category = cat_slug
+                if listing.suggested_subcategory:
+                    sub_slug = slugify(listing.suggested_subcategory)[:50]
+                    Subcategory.objects.get_or_create(
+                        category=cat, slug=sub_slug,
+                        defaults={'label': listing.suggested_subcategory, 'display_order': 99},
+                    )
+                    listing.subcategory = sub_slug
+                listing.suggested_category = ''
+                listing.suggested_subcategory = ''
+                listing.save(update_fields=['category', 'subcategory', 'suggested_category', 'suggested_subcategory'])
+                new_cats.append(cat.label)
+
             correction = validate_and_correct_listing_category(listing)
             if correction:
                 corrections.append(correction)
@@ -215,6 +236,8 @@ class ListingAdmin(admin.ModelAdmin):
             enriched += 1
 
         msg = f'{len(to_approve)} listing(s) approved, {enriched} enriched.'
+        if new_cats:
+            msg += f' New categories added to platform: {", ".join(new_cats)}.'
         if corrections:
             msg += f' Auto-corrected {len(corrections)}: ' + '; '.join(corrections)
         self.message_user(request, msg)
@@ -239,45 +262,6 @@ class ListingAdmin(admin.ModelAdmin):
     def clear_ai_flag(self, request, queryset):
         updated = queryset.update(ai_enrichment_flagged=False, ai_enrichment_admin_edited=True)
         self.message_user(request, f'{updated} listing(s) AI flag cleared.')
-
-    @admin.action(description='⚡ Create suggested category and approve')
-    def create_suggested_category_and_approve(self, request, queryset):
-        from .models import Category, Subcategory
-        processed = []
-        skipped = []
-        for listing in queryset:
-            if listing.category != 'other' or not listing.suggested_category:
-                skipped.append(listing.title)
-                continue
-            cat_slug = slugify(listing.suggested_category)[:50]
-            cat, created = Category.objects.get_or_create(
-                slug=cat_slug,
-                defaults={'label': listing.suggested_category, 'display_order': 99},
-            )
-            if not created and cat.label != listing.suggested_category:
-                cat.label = listing.suggested_category
-                cat.save(update_fields=['label'])
-            listing.category = cat_slug
-            if listing.suggested_subcategory:
-                sub_slug = slugify(listing.suggested_subcategory)[:50]
-                sub, _ = Subcategory.objects.get_or_create(
-                    category=cat, slug=sub_slug,
-                    defaults={'label': listing.suggested_subcategory, 'display_order': 99},
-                )
-                listing.subcategory = sub_slug
-            listing.suggested_category = ''
-            listing.suggested_subcategory = ''
-            listing.status = 'active'
-            listing.save(update_fields=['category', 'subcategory', 'suggested_category', 'suggested_subcategory', 'status'])
-            invalidate_category_cache()
-            match_listing_to_wishlists(listing)
-            match_want_text_to_listings(listing)
-            enrich_listing_with_ai(listing)
-            processed.append(listing.title)
-        msg = f'{len(processed)} listing(s) approved with new category.'
-        if skipped:
-            msg += f' {len(skipped)} skipped (no suggestion): {", ".join(skipped[:3])}{"…" if len(skipped) > 3 else ""}.'
-        self.message_user(request, msg)
 
     def save_model(self, request, obj, form, change):
         if change and 'ai_enrichment' in form.changed_data:
