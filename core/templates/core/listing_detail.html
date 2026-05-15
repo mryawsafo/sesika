@@ -152,9 +152,27 @@
   <!-- Right: sidebar -->
   <aside class="sidebar">
 
-    <!-- Value card -->
+    {% if listing.transaction_type == 'rental' %}
+    <!-- Rental terms card -->
     <div class="side-card value-card">
-      <div class="label-up">Estimated trade value</div>
+      <div class="label-up">🔑 Rental terms</div>
+      <div class="big-price" style="font-size:1.3rem; line-height:1.3;">{{ listing.want_text }}</div>
+      {% if listing.rental_period_unit %}
+        <div class="compare">{{ listing.get_rental_period_unit_display }}</div>
+      {% endif %}
+      {% if listing.deposit_required %}
+        <div class="compare" style="margin-top:6px;">
+          Deposit required{% if listing.deposit_description %}: {{ listing.deposit_description }}{% endif %}
+        </div>
+      {% endif %}
+      {% if listing.rental_conditions %}
+        <div class="compare" style="margin-top:6px; font-style:italic;">{{ listing.rental_conditions }}</div>
+      {% endif %}
+    </div>
+    {% else %}
+    <!-- Trade value card -->
+    <div class="side-card value-card">
+      <div class="label-up">Estimated value</div>
       <div class="big-price"><span class="ghs">GHS</span>{{ listing.final_estimated_value|floatformat:0 }}</div>
       <div class="compare">
         Your estimate: <strong>GHS {{ listing.user_estimated_value|floatformat:0 }}</strong><br>
@@ -166,6 +184,7 @@
         {% endif %}
       </div>
     </div>
+    {% endif %}
 
     <!-- Demand signal -->
     {% if demand_count > 0 %}
