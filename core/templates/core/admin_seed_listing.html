@@ -176,6 +176,14 @@
         </div>
       </div>
 
+      <!-- Category-specific attributes -->
+      <div id="seed-attributes-section" style="display:none;">
+        <hr style="border:none; border-top:1px solid var(--border-soft); margin:12px 0 16px;">
+        <div style="font-size:0.9rem; font-weight:600; color:var(--text-2); margin-bottom:12px;">Specifications</div>
+        <div id="seed-attributes-fields"></div>
+      </div>
+      <input type="hidden" name="attributes_json" id="seed_attributes_json_input">
+
       <hr style="border:none; border-top:1px solid var(--border-soft); margin:16px 0;">
 
       <!-- Photos -->
@@ -233,10 +241,81 @@
     physExtras.style.display = t === 'service' ? 'none' : '';
   }
 
-  catEl.addEventListener('change', refreshSub);
+  var attrSchemas = {{ attribute_schemas_json|safe }};
+  var txnEl = document.getElementById('s_txn');
+
+  function buildSeedAttrField(fieldDef) {
+    var wrapper = document.createElement('div');
+    wrapper.className = 'form-group';
+    if (fieldDef.type === 'checkbox') wrapper.style.cssText = 'display:flex; align-items:center; gap:8px; margin-top:4px;';
+    var id = 'seed_attr_' + fieldDef.name;
+    var label = document.createElement('label');
+    label.className = 'form-label'; label.htmlFor = id;
+    label.textContent = fieldDef.label + (fieldDef.required ? ' *' : '');
+    var input;
+    if (fieldDef.type === 'select') {
+      input = document.createElement('select');
+      var empty = document.createElement('option'); empty.value = ''; empty.textContent = '— Select —';
+      input.appendChild(empty);
+      (fieldDef.options || []).forEach(function(opt) {
+        var o = document.createElement('option'); o.value = opt[0]; o.textContent = opt[1];
+        input.appendChild(o);
+      });
+    } else if (fieldDef.type === 'checkbox') {
+      input = document.createElement('input'); input.type = 'checkbox';
+    } else {
+      input = document.createElement('input');
+      input.type = fieldDef.type === 'number' ? 'number' : 'text';
+      if (fieldDef.placeholder) input.placeholder = fieldDef.placeholder;
+      if (fieldDef.min !== undefined) input.min = fieldDef.min;
+      if (fieldDef.max !== undefined) input.max = fieldDef.max;
+    }
+    input.id = id; input.name = id;
+    if (fieldDef.type === 'checkbox') { wrapper.appendChild(input); wrapper.appendChild(label); }
+    else { wrapper.appendChild(label); wrapper.appendChild(input); }
+    return wrapper;
+  }
+
+  function refreshSeedAttrs() {
+    var cat = catEl.value;
+    var txn = txnEl ? txnEl.value : 'trade';
+    var section = document.getElementById('seed-attributes-section');
+    var fieldsDiv = document.getElementById('seed-attributes-fields');
+    if (!section || !fieldsDiv) return;
+    var schema = (attrSchemas[cat] || {})[txn];
+    if (!schema || schema.length === 0) { section.style.display = 'none'; return; }
+    section.style.display = '';
+    fieldsDiv.innerHTML = '';
+    var grid = document.createElement('div');
+    grid.style.cssText = 'display:grid; grid-template-columns:1fr 1fr; gap:10px 16px;';
+    schema.forEach(function(fd) { grid.appendChild(buildSeedAttrField(fd)); });
+    fieldsDiv.appendChild(grid);
+  }
+
+  function collectSeedAttributes() {
+    var cat = catEl.value;
+    var txn = txnEl ? txnEl.value : 'trade';
+    var schema = (attrSchemas[cat] || {})[txn];
+    if (!schema || schema.length === 0) return;
+    var attrs = {};
+    schema.forEach(function(fd) {
+      var el = document.getElementById('seed_attr_' + fd.name);
+      if (!el) return;
+      if (fd.type === 'checkbox') { attrs[fd.name] = el.checked; }
+      else if (fd.type === 'number') { var v = el.value.trim(); if (v !== '') attrs[fd.name] = parseFloat(v); }
+      else { var v = el.value.trim(); if (v) attrs[fd.name] = v; }
+    });
+    document.getElementById('seed_attributes_json_input').value = JSON.stringify(attrs);
+  }
+
+  catEl.addEventListener('change', function() { refreshSub(); refreshSeedAttrs(); });
+  if (txnEl) txnEl.addEventListener('change', refreshSeedAttrs);
   ltypeEl.addEventListener('change', refreshType);
+  var seedForm = document.querySelector('form');
+  if (seedForm) seedForm.addEventListener('submit', collectSeedAttributes);
   refreshSub();
   refreshType();
+  refreshSeedAttrs();
 
   // Region → town wiring
   var TOWNS = {{ towns_json|safe }};

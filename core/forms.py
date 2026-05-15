@@ -3,12 +3,13 @@ from decimal import Decimal
 from django import forms
 from .models import (
     Listing, Offer, WishlistItem, CATEGORY_CHOICES, SUBCATEGORY_CHOICES,
-    SUBCATEGORY_FLAT_CHOICES, CONDITION_CHOICES, GHANA_REGION_CHOICES,
+    CONDITION_CHOICES, GHANA_REGION_CHOICES,
     TRANSACTION_TYPE_CHOICES, LISTING_TYPE_CHOICES, LISTING_BEHAVIOUR_CHOICES,
     DURATION_CHOICES, COLLECTION_METHOD_CHOICES, CASH_TOPUP_DIRECTION_CHOICES,
     RENTAL_PERIOD_CHOICES, WANT_TYPE_CHOICES, TERM_TYPE_CHOICES,
     CONDITION_ACCEPTABLE_CHOICES, NOTIFICATION_FREQUENCY_CHOICES,
     CONTACT_REVEAL_CHOICES, BarterUser,
+    get_active_categories, get_subcategory_map,
 )
 
 
@@ -40,7 +41,7 @@ class LoginForm(forms.Form):
 
 class ListingForm(forms.ModelForm):
     subcategory = forms.ChoiceField(
-        choices=[('', '— Select subcategory —')] + SUBCATEGORY_FLAT_CHOICES,
+        choices=[('', '— Select subcategory —')],
         label='Subcategory',
         required=False,
     )
@@ -151,11 +152,15 @@ class ListingForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['category'].choices = [('', '— Select category —')] + list(CATEGORY_CHOICES)
+        active_cats = get_active_categories()
+        sub_map = get_subcategory_map()
+        all_subs = [(slug, label) for subs in sub_map.values() for slug, label in subs]
+        self.fields['category'].choices = [('', '— Select category —')] + list(active_cats)
+        self.fields['subcategory'].choices = [('', '— Select subcategory —')] + all_subs
         self.fields['location_region'].choices = [('', '— Select region —')] + list(GHANA_REGION_CHOICES)
         self.fields['duration_days'].required = False
         self.fields['condition'].required = False
-        self.subcategory_choices_json = json.dumps(SUBCATEGORY_CHOICES)
+        self.subcategory_choices_json = json.dumps({k: list(v) for k, v in sub_map.items()})
 
     def clean(self):
         cleaned = super().clean()
@@ -166,7 +171,8 @@ class ListingForm(forms.ModelForm):
         duration = cleaned.get('duration_days')
 
         if subcategory and category:
-            valid = {slug for slug, _ in SUBCATEGORY_CHOICES.get(category, [])}
+            sub_map = get_subcategory_map()
+            valid = {slug for slug, _ in sub_map.get(category, [])}
             if subcategory not in valid:
                 self.add_error('subcategory', 'Select a valid subcategory for the chosen category.')
 
@@ -304,7 +310,7 @@ class WishlistItemForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['category'].choices = [('', '— Any category —')] + list(CATEGORY_CHOICES)
+        self.fields['category'].choices = [('', '— Any category —')] + list(get_active_categories())
         self.fields['category'].required = False
 
 

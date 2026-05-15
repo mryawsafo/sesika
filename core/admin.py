@@ -6,7 +6,7 @@ from .models import (
     CampusGroup, CampusMembership, TradeRating,
     match_listing_to_wishlists, match_want_text_to_listings,
     validate_and_correct_listing_category, enrich_listing_with_ai,
-    DeviceToken, LoginAttempt,
+    DeviceToken, LoginAttempt, Category, Subcategory, invalidate_category_cache,
 )
 
 
@@ -45,6 +45,33 @@ class ListingPhotoInline(admin.TabularInline):
 @admin.register(CategoryBaseline)
 class CategoryBaselineAdmin(admin.ModelAdmin):
     list_display = ('category', 'min_value', 'typical_value', 'max_value')
+
+
+class SubcategoryInline(admin.TabularInline):
+    model = Subcategory
+    extra = 1
+    fields = ('slug', 'label', 'display_order', 'is_active')
+
+
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ('label', 'slug', 'icon', 'display_order', 'is_active', 'subcategory_count')
+    list_filter = ('is_active',)
+    search_fields = ('slug', 'label')
+    inlines = [SubcategoryInline]
+    prepopulated_fields = {'slug': ('label',)}
+
+    @admin.display(description='Subcategories')
+    def subcategory_count(self, obj):
+        return obj.subcategories.filter(is_active=True).count()
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        invalidate_category_cache()
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        invalidate_category_cache()
 
 
 @admin.register(PriceSample)
@@ -112,11 +139,19 @@ class ListingAdmin(admin.ModelAdmin):
                 'availability_notes', 'rental_conditions',
             ],
         }),
+        ('Structured Attributes', {
+            'classes': ['collapse'],
+            'fields': ['attributes'],
+        }),
         ('AI Enrichment', {
             'fields': [
                 'ai_enrichment_display', 'ai_enrichment',
                 'ai_enrichment_hidden', 'ai_enrichment_flagged', 'ai_enrichment_admin_edited',
             ],
+        }),
+        ('SEO', {
+            'classes': ['collapse'],
+            'fields': ['slug', 'seo_title', 'seo_description'],
         }),
         ('Status', {
             'fields': ['status', 'rejection_reason'],

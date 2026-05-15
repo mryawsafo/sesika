@@ -441,6 +441,456 @@ class CategoryBaseline(models.Model):
         return f"{self.category} (typical: {self.typical_value})"
 
 
+class Category(models.Model):
+    slug = models.SlugField(max_length=50, unique=True)
+    label = models.CharField(max_length=100)
+    icon = models.CharField(max_length=10, blank=True, help_text='Emoji icon, e.g. 📱')
+    display_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['display_order', 'label']
+        verbose_name = 'Category'
+        verbose_name_plural = 'Categories'
+
+    def __str__(self):
+        return self.label
+
+
+class Subcategory(models.Model):
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='subcategories')
+    slug = models.SlugField(max_length=50)
+    label = models.CharField(max_length=100)
+    display_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = [['category', 'slug']]
+        ordering = ['category__display_order', 'display_order', 'label']
+        verbose_name = 'Subcategory'
+        verbose_name_plural = 'Subcategories'
+
+    def __str__(self):
+        return f"{self.category.label} › {self.label}"
+
+
+# ---------------------------------------------------------------------------
+# DB-driven category cache helpers
+# ---------------------------------------------------------------------------
+
+_category_cache = None
+
+
+def get_active_categories():
+    global _category_cache
+    if _category_cache is None:
+        try:
+            _category_cache = list(
+                Category.objects.filter(is_active=True)
+                .values_list('slug', 'label')
+                .order_by('display_order', 'label')
+            )
+        except Exception:
+            _category_cache = CATEGORY_CHOICES
+    return _category_cache
+
+
+def get_subcategory_map():
+    try:
+        from collections import defaultdict
+        result = defaultdict(list)
+        for sub in (
+            Subcategory.objects.filter(is_active=True)
+            .select_related('category')
+            .order_by('category__display_order', 'display_order', 'label')
+        ):
+            result[sub.category.slug].append((sub.slug, sub.label))
+        return dict(result)
+    except Exception:
+        return SUBCATEGORY_CHOICES
+
+
+def invalidate_category_cache():
+    global _category_cache
+    _category_cache = None
+
+
+# ---------------------------------------------------------------------------
+# Category-specific attribute schemas
+# ---------------------------------------------------------------------------
+
+CATEGORY_ATTRIBUTE_SCHEMAS = {
+
+    # ── Phones & Tablets ────────────────────────────────────────────────────
+    'phones_tablets': {
+        'trade': [
+            {'name': 'storage_gb',          'label': 'Storage',                   'type': 'select',   'required': True,
+             'options': [['16','16 GB'],['32','32 GB'],['64','64 GB'],['128','128 GB'],['256','256 GB'],['512','512 GB'],['1024','1 TB']]},
+            {'name': 'ram_gb',              'label': 'RAM',                        'type': 'select',   'required': False,
+             'options': [['2','2 GB'],['3','3 GB'],['4','4 GB'],['6','6 GB'],['8','8 GB'],['12','12 GB'],['16','16 GB']]},
+            {'name': 'network',             'label': 'Network',                    'type': 'select',   'required': False,
+             'options': [['5g','5G'],['4g','4G LTE'],['3g','3G']]},
+            {'name': 'sim_slots',           'label': 'SIM Slots',                  'type': 'select',   'required': False,
+             'options': [['single','Single SIM'],['dual','Dual SIM']]},
+            {'name': 'battery_health',      'label': 'Battery Health (%)',         'type': 'number',   'required': False, 'min': 1, 'max': 100,
+             'placeholder': 'e.g. 87 — iPhones only'},
+            {'name': 'original_box',        'label': 'Original box & accessories', 'type': 'checkbox', 'required': False},
+        ],
+        'rental': [
+            {'name': 'storage_gb',          'label': 'Storage',                   'type': 'select',   'required': False,
+             'options': [['32','32 GB'],['64','64 GB'],['128','128 GB'],['256','256 GB']]},
+            {'name': 'network',             'label': 'Network',                    'type': 'select',   'required': False,
+             'options': [['5g','5G'],['4g','4G LTE'],['3g','3G']]},
+            {'name': 'sim_included',        'label': 'Local SIM card included',    'type': 'checkbox', 'required': False},
+            {'name': 'daily_price',         'label': 'Daily Rate (GHS)',           'type': 'number',   'required': False},
+            {'name': 'weekly_price',        'label': 'Weekly Rate (GHS)',          'type': 'number',   'required': False},
+        ],
+    },
+
+    # ── Computers & Laptops ─────────────────────────────────────────────────
+    'computers': {
+        'trade': [
+            {'name': 'ram_gb',              'label': 'RAM',                        'type': 'select',   'required': True,
+             'options': [['4','4 GB'],['8','8 GB'],['12','12 GB'],['16','16 GB'],['32','32 GB'],['64','64 GB']]},
+            {'name': 'storage_gb',          'label': 'Storage Size',               'type': 'select',   'required': True,
+             'options': [['128','128 GB'],['256','256 GB'],['512','512 GB'],['1000','1 TB'],['2000','2 TB']]},
+            {'name': 'storage_type',        'label': 'Storage Type',               'type': 'select',   'required': False,
+             'options': [['ssd','SSD'],['hdd','HDD'],['ssd_hdd','SSD + HDD']]},
+            {'name': 'processor',           'label': 'Processor',                  'type': 'select',   'required': False,
+             'options': [['intel_i3','Intel Core i3'],['intel_i5','Intel Core i5'],['intel_i7','Intel Core i7'],
+                         ['intel_i9','Intel Core i9'],['amd_ryzen5','AMD Ryzen 5'],['amd_ryzen7','AMD Ryzen 7'],
+                         ['apple_m1','Apple M1'],['apple_m2','Apple M2'],['apple_m3','Apple M3'],['other','Other']]},
+            {'name': 'screen_size',         'label': 'Screen Size (inches)',        'type': 'select',   'required': False,
+             'options': [['11','11"'],['13','13"'],['14','14"'],['15','15.6"'],['16','16"'],['17','17"']]},
+            {'name': 'charger_included',    'label': 'Charger included',           'type': 'checkbox', 'required': False},
+            {'name': 'touch_screen',        'label': 'Touchscreen',                'type': 'checkbox', 'required': False},
+        ],
+        'rental': [
+            {'name': 'ram_gb',              'label': 'RAM',                        'type': 'select',   'required': False,
+             'options': [['4','4 GB'],['8','8 GB'],['16','16 GB'],['32','32 GB']]},
+            {'name': 'processor',           'label': 'Processor',                  'type': 'select',   'required': False,
+             'options': [['intel_i5','Intel i5'],['intel_i7','Intel i7'],['amd_ryzen5','AMD Ryzen 5'],
+                         ['apple_m1','Apple M1'],['apple_m2','Apple M2'],['apple_m3','Apple M3']]},
+            {'name': 'preloaded_software',  'label': 'Preloaded software',         'type': 'text',     'required': False,
+             'placeholder': 'e.g. MS Office, Adobe CC, AutoCAD'},
+            {'name': 'daily_price',         'label': 'Daily Rate (GHS)',           'type': 'number',   'required': False},
+            {'name': 'weekly_price',        'label': 'Weekly Rate (GHS)',          'type': 'number',   'required': False},
+        ],
+    },
+
+    # ── Electronics ─────────────────────────────────────────────────────────
+    'electronics': {
+        'trade': [
+            {'name': 'screen_size',         'label': 'Screen Size (inches)',        'type': 'number',   'required': False,
+             'placeholder': 'e.g. 55 — TVs & monitors only', 'min': 5, 'max': 120},
+            {'name': 'resolution',          'label': 'Resolution',                 'type': 'select',   'required': False,
+             'options': [['hd','HD 720p'],['fhd','Full HD 1080p'],['4k','4K UHD'],['8k','8K']]},
+            {'name': 'smart',               'label': 'Smart / WiFi enabled',       'type': 'checkbox', 'required': False},
+            {'name': 'wireless',            'label': 'Wireless / Bluetooth',       'type': 'checkbox', 'required': False},
+            {'name': 'remote_included',     'label': 'Remote / accessories included','type': 'checkbox','required': False},
+        ],
+        'rental': [
+            {'name': 'screen_size',         'label': 'Screen Size (inches)',        'type': 'number',   'required': False,
+             'placeholder': 'e.g. 55 — TVs only', 'min': 5, 'max': 120},
+            {'name': 'smart',               'label': 'Smart / WiFi enabled',       'type': 'checkbox', 'required': False},
+            {'name': 'quantity_available',  'label': 'Units available',            'type': 'number',   'required': False,
+             'placeholder': 'e.g. 2 speakers, 1 projector'},
+            {'name': 'daily_price',         'label': 'Daily Rate (GHS)',           'type': 'number',   'required': False},
+            {'name': 'per_event_price',     'label': 'Per-event Rate (GHS)',       'type': 'number',   'required': False},
+        ],
+    },
+
+    # ── Gaming ──────────────────────────────────────────────────────────────
+    'gaming': {
+        'trade': [
+            {'name': 'platform',            'label': 'Platform',                   'type': 'select',   'required': True,
+             'options': [['ps5','PlayStation 5'],['ps4','PlayStation 4'],['ps3','PlayStation 3'],
+                         ['xbox_series','Xbox Series X/S'],['xbox_one','Xbox One'],
+                         ['nintendo_switch','Nintendo Switch'],['pc','PC / Steam Deck'],['other','Other']]},
+            {'name': 'storage_gb',          'label': 'Console Storage',            'type': 'select',   'required': False,
+             'options': [['500','500 GB'],['825','825 GB'],['1000','1 TB'],['2000','2 TB']]},
+            {'name': 'controllers',         'label': 'Controllers included',       'type': 'number',   'required': False, 'min': 0, 'max': 8},
+            {'name': 'games_count',         'label': 'Games included',             'type': 'number',   'required': False, 'min': 0},
+            {'name': 'game_titles',         'label': 'Game titles (if any)',       'type': 'text',     'required': False,
+             'placeholder': 'e.g. FIFA 25, GTA V, God of War'},
+        ],
+        'rental': [
+            {'name': 'platform',            'label': 'Platform',                   'type': 'select',   'required': True,
+             'options': [['ps5','PlayStation 5'],['ps4','PlayStation 4'],['xbox_series','Xbox Series X/S'],
+                         ['nintendo_switch','Nintendo Switch'],['other','Other']]},
+            {'name': 'controllers',         'label': 'Controllers included',       'type': 'number',   'required': False, 'min': 1, 'max': 8},
+            {'name': 'games_count',         'label': 'Games / titles available',   'type': 'number',   'required': False},
+            {'name': 'daily_price',         'label': 'Daily Rate (GHS)',           'type': 'number',   'required': False},
+            {'name': 'per_event_price',     'label': 'Party / event Rate (GHS)',   'type': 'number',   'required': False},
+            {'name': 'setup_included',      'label': 'Setup & teardown included',  'type': 'checkbox', 'required': False},
+        ],
+    },
+
+    # ── Vehicles ────────────────────────────────────────────────────────────
+    'vehicles': {
+        'trade': [
+            {'name': 'year',                'label': 'Year',                       'type': 'number',   'required': True,  'min': 1960, 'max': 2030},
+            {'name': 'transmission',        'label': 'Transmission',               'type': 'select',   'required': True,
+             'options': [['manual','Manual'],['automatic','Automatic'],['semi_auto','Semi-Automatic']]},
+            {'name': 'fuel_type',           'label': 'Fuel Type',                  'type': 'select',   'required': True,
+             'options': [['petrol','Petrol'],['diesel','Diesel'],['electric','Electric'],['hybrid','Hybrid'],['lpg','LPG']]},
+            {'name': 'mileage_km',          'label': 'Mileage (km)',               'type': 'number',   'required': False},
+            {'name': 'seating_capacity',    'label': 'Seating Capacity',           'type': 'number',   'required': False},
+            {'name': 'cargo_capacity',      'label': 'Cargo Capacity',             'type': 'text',     'required': False,
+             'placeholder': 'e.g. 1.5 tonnes'},
+            {'name': 'drivetrain',          'label': 'Drivetrain',                 'type': 'select',   'required': False,
+             'options': [['2wd','2WD'],['4wd','4WD'],['awd','AWD']]},
+            {'name': 'ac',                  'label': 'Air Conditioning',           'type': 'checkbox', 'required': False},
+            {'name': 'power_steering',      'label': 'Power Steering',             'type': 'checkbox', 'required': False},
+        ],
+        'rental': [
+            {'name': 'year',                'label': 'Year',                       'type': 'number',   'required': True,  'min': 1960, 'max': 2030},
+            {'name': 'transmission',        'label': 'Transmission',               'type': 'select',   'required': True,
+             'options': [['manual','Manual'],['automatic','Automatic'],['semi_auto','Semi-Automatic']]},
+            {'name': 'fuel_type',           'label': 'Fuel Type',                  'type': 'select',   'required': True,
+             'options': [['petrol','Petrol'],['diesel','Diesel'],['electric','Electric'],['hybrid','Hybrid'],['lpg','LPG']]},
+            {'name': 'mileage_km',          'label': 'Current Mileage (km)',       'type': 'number',   'required': False},
+            {'name': 'seating_capacity',    'label': 'Seating Capacity',           'type': 'number',   'required': False},
+            {'name': 'ac',                  'label': 'Air Conditioning',           'type': 'checkbox', 'required': False},
+            {'name': 'power_steering',      'label': 'Power Steering',             'type': 'checkbox', 'required': False},
+            {'name': 'daily_price',         'label': 'Daily Rate (GHS)',           'type': 'number',   'required': False},
+            {'name': 'weekly_price',        'label': 'Weekly Rate (GHS)',          'type': 'number',   'required': False},
+            {'name': 'monthly_price',       'label': 'Monthly Rate (GHS)',         'type': 'number',   'required': False},
+            {'name': 'driver_included',     'label': 'Driver Included',            'type': 'checkbox', 'required': False},
+            {'name': 'self_drive',          'label': 'Self-Drive Option',          'type': 'checkbox', 'required': False},
+            {'name': 'fuel_policy',         'label': 'Fuel Policy',                'type': 'select',   'required': False,
+             'options': [['full_to_full','Full to Full'],['same_level','Same Level'],['included','Fuel Included']]},
+            {'name': 'mileage_limit',       'label': 'Mileage Limit',             'type': 'text',     'required': False,
+             'placeholder': 'e.g. 200 km/day or Unlimited'},
+        ],
+    },
+
+    # ── Fashion ─────────────────────────────────────────────────────────────
+    'fashion': {
+        'trade': [
+            {'name': 'size',                'label': 'Size',                       'type': 'text',     'required': True,
+             'placeholder': 'e.g. M, L, UK 10, EU 42, 32W/30L'},
+            {'name': 'gender',              'label': 'For',                        'type': 'select',   'required': True,
+             'options': [['women',"Women's"],['men',"Men's"],['unisex','Unisex'],['girls',"Girls'"],['boys',"Boys'"]]},
+            {'name': 'color',               'label': 'Colour',                     'type': 'text',     'required': False,
+             'placeholder': 'e.g. Black, Navy Blue, Kente print'},
+            {'name': 'material',            'label': 'Material / Fabric',          'type': 'text',     'required': False,
+             'placeholder': 'e.g. 100% Cotton, Polyester blend, Kente'},
+            {'name': 'new_with_tags',       'label': 'New with tags (unworn)',     'type': 'checkbox', 'required': False},
+        ],
+        'rental': [
+            {'name': 'size',                'label': 'Size',                       'type': 'text',     'required': True,
+             'placeholder': 'e.g. M, UK 10, EU 42'},
+            {'name': 'gender',              'label': 'For',                        'type': 'select',   'required': True,
+             'options': [['women',"Women's"],['men',"Men's"],['unisex','Unisex']]},
+            {'name': 'occasion',            'label': 'Occasion',                   'type': 'select',   'required': False,
+             'options': [['formal','Formal / Corporate'],['casual','Casual'],['wedding','Wedding / Engagement'],
+                         ['traditional','Traditional / Kente / Kaba'],['party','Party / Night out'],
+                         ['costume','Costume / Themed event']]},
+            {'name': 'dry_cleaning_fee',    'label': 'Dry cleaning fee (GHS)',     'type': 'number',   'required': False},
+            {'name': 'per_day_price',       'label': 'Per-day Rate (GHS)',         'type': 'number',   'required': False},
+            {'name': 'per_event_price',     'label': 'Per-event Rate (GHS)',       'type': 'number',   'required': False},
+        ],
+    },
+
+    # ── Home & Furniture ────────────────────────────────────────────────────
+    'home_furniture': {
+        'trade': [
+            {'name': 'material',            'label': 'Material',                   'type': 'select',   'required': False,
+             'options': [['wood','Wood'],['metal','Metal'],['glass','Glass'],['plastic','Plastic'],
+                         ['fabric','Fabric / Upholstered'],['rattan','Rattan / Wicker'],['mixed','Mixed materials']]},
+            {'name': 'color',               'label': 'Colour / Finish',            'type': 'text',     'required': False,
+             'placeholder': 'e.g. Brown, White, Oak'},
+            {'name': 'dimensions',          'label': 'Dimensions (L × W × H cm)', 'type': 'text',     'required': False,
+             'placeholder': 'e.g. 180 × 90 × 75'},
+            {'name': 'seating_capacity',    'label': 'Seating capacity',           'type': 'number',   'required': False,
+             'placeholder': 'e.g. 3 (sofas / chairs)'},
+            {'name': 'delivery_possible',   'label': 'Can arrange delivery',       'type': 'checkbox', 'required': False},
+        ],
+        'rental': [
+            {'name': 'material',            'label': 'Material',                   'type': 'select',   'required': False,
+             'options': [['wood','Wood'],['metal','Metal'],['plastic','Plastic'],['fabric','Fabric'],['mixed','Mixed']]},
+            {'name': 'color',               'label': 'Colour',                     'type': 'text',     'required': False,
+             'placeholder': 'e.g. White, Brown, Black'},
+            {'name': 'quantity_available',  'label': 'Units available',            'type': 'number',   'required': False,
+             'placeholder': 'e.g. 20 chairs, 5 tables'},
+            {'name': 'per_event_price',     'label': 'Per-event Rate (GHS)',       'type': 'number',   'required': False},
+            {'name': 'daily_price',         'label': 'Daily Rate (GHS)',           'type': 'number',   'required': False},
+            {'name': 'delivery_setup',      'label': 'Delivery & setup included',  'type': 'checkbox', 'required': False},
+        ],
+    },
+
+    # ── Health & Beauty ─────────────────────────────────────────────────────
+    'health_beauty': {
+        'trade': [
+            {'name': 'item_type',           'label': 'Item type',                  'type': 'select',   'required': False,
+             'options': [['skincare','Skincare / Moisturiser'],['haircare','Haircare'],['makeup','Makeup / Cosmetics'],
+                         ['fragrance','Fragrance / Perfume'],['supplements','Supplements / Vitamins'],
+                         ['device','Health / Beauty device'],['medical','Medical equipment']]},
+            {'name': 'skin_type',           'label': 'Suitable skin type',         'type': 'select',   'required': False,
+             'options': [['all','All skin types'],['oily','Oily'],['dry','Dry'],
+                         ['combination','Combination'],['sensitive','Sensitive']]},
+            {'name': 'quantity_remaining',  'label': 'Amount remaining',           'type': 'text',     'required': False,
+             'placeholder': 'e.g. Unopened, ~80% full, 30 tablets left'},
+            {'name': 'expiry_date',         'label': 'Expiry / best before',       'type': 'text',     'required': False,
+             'placeholder': 'e.g. 06/2026'},
+        ],
+        'rental': [
+            {'name': 'item_type',           'label': 'Equipment type',             'type': 'select',   'required': False,
+             'options': [['massage','Massage / spa equipment'],['physio','Physiotherapy equipment'],
+                         ['monitor','Health monitor / device'],['salon','Salon equipment'],['other','Other']]},
+            {'name': 'daily_price',         'label': 'Daily Rate (GHS)',           'type': 'number',   'required': False},
+            {'name': 'weekly_price',        'label': 'Weekly Rate (GHS)',          'type': 'number',   'required': False},
+        ],
+    },
+
+    # ── Sports & Hobbies ────────────────────────────────────────────────────
+    'sports_hobbies': {
+        'trade': [
+            {'name': 'sport_activity',      'label': 'Sport / Activity',           'type': 'text',     'required': False,
+             'placeholder': 'e.g. Football, Swimming, Cycling, Basketball'},
+            {'name': 'size',                'label': 'Size / Spec',                'type': 'text',     'required': False,
+             'placeholder': 'e.g. Size 5, 26" wheel, UK 10, Medium frame'},
+            {'name': 'level',               'label': 'Suitable for',               'type': 'select',   'required': False,
+             'options': [['all','All levels'],['beginner','Beginner / Recreational'],
+                         ['intermediate','Intermediate'],['professional','Professional / Competitive']]},
+        ],
+        'rental': [
+            {'name': 'sport_activity',      'label': 'Sport / Activity',           'type': 'text',     'required': False,
+             'placeholder': 'e.g. Cycling, Camping, Watersports'},
+            {'name': 'quantity_available',  'label': 'Units available',            'type': 'number',   'required': False},
+            {'name': 'daily_price',         'label': 'Daily Rate (GHS)',           'type': 'number',   'required': False},
+            {'name': 'weekly_price',        'label': 'Weekly Rate (GHS)',          'type': 'number',   'required': False},
+            {'name': 'per_event_price',     'label': 'Per-event Rate (GHS)',       'type': 'number',   'required': False},
+        ],
+    },
+
+    # ── Tools & Equipment ───────────────────────────────────────────────────
+    'tools_equipment': {
+        'trade': [
+            {'name': 'power_source',        'label': 'Power source',               'type': 'select',   'required': False,
+             'options': [['electric','Electric / Mains'],['battery','Battery / Cordless'],
+                         ['manual','Manual / Hand tool'],['petrol','Petrol / Engine'],['solar','Solar']]},
+            {'name': 'voltage',             'label': 'Voltage',                    'type': 'select',   'required': False,
+             'options': [['220v','220 / 240V'],['110v','110V'],['universal','Universal / Dual voltage']]},
+            {'name': 'accessories_included','label': 'Accessories / bits included', 'type': 'checkbox', 'required': False},
+        ],
+        'rental': [
+            {'name': 'power_source',        'label': 'Power source',               'type': 'select',   'required': False,
+             'options': [['electric','Electric / Mains'],['battery','Battery / Cordless'],
+                         ['manual','Manual'],['petrol','Petrol / Engine']]},
+            {'name': 'quantity_available',  'label': 'Units available',            'type': 'number',   'required': False},
+            {'name': 'daily_price',         'label': 'Daily Rate (GHS)',           'type': 'number',   'required': False},
+            {'name': 'weekly_price',        'label': 'Weekly Rate (GHS)',          'type': 'number',   'required': False},
+            {'name': 'security_deposit',    'label': 'Security deposit (GHS)',     'type': 'number',   'required': False},
+            {'name': 'training_provided',   'label': 'Usage guidance provided',    'type': 'checkbox', 'required': False},
+        ],
+    },
+
+    # ── Handmade & Crafts ───────────────────────────────────────────────────
+    'handmade_crafts': {
+        'trade': [
+            {'name': 'materials',           'label': 'Main materials',             'type': 'text',     'required': False,
+             'placeholder': 'e.g. Cotton yarn, Mahogany, Beeswax, Resin'},
+            {'name': 'dimensions',          'label': 'Size / Dimensions',          'type': 'text',     'required': False,
+             'placeholder': 'e.g. 30 × 20 cm, One-size, S/M/L'},
+            {'name': 'quantity_available',  'label': 'Units in stock',             'type': 'number',   'required': False, 'min': 1},
+            {'name': 'made_to_order',       'label': 'Custom / made-to-order available','type': 'checkbox','required': False},
+            {'name': 'production_days',     'label': 'Production time (days)',     'type': 'number',   'required': False,
+             'placeholder': 'e.g. 5 (if made to order)'},
+        ],
+        'rental': [
+            {'name': 'item_type',           'label': 'Item type',                  'type': 'text',     'required': False,
+             'placeholder': 'e.g. Centrepieces, Backdrops, Decor props'},
+            {'name': 'quantity_available',  'label': 'Units available',            'type': 'number',   'required': False},
+            {'name': 'per_event_price',     'label': 'Per-event Rate (GHS)',       'type': 'number',   'required': False},
+            {'name': 'setup_included',      'label': 'Setup / styling included',   'type': 'checkbox', 'required': False},
+        ],
+    },
+
+    # ── Art & Creative ──────────────────────────────────────────────────────
+    'art_creative': {
+        'trade': [
+            {'name': 'medium',              'label': 'Medium / Type',              'type': 'select',   'required': False,
+             'options': [['oil','Oil paint'],['acrylic','Acrylic'],['watercolor','Watercolour'],
+                         ['pencil','Pencil / Charcoal'],['mixed_media','Mixed media'],
+                         ['photography_print','Photography print'],['digital_print','Digital / Giclee print'],
+                         ['sculpture','Sculpture'],['textile','Textile / Fabric art'],['other','Other']]},
+            {'name': 'dimensions',          'label': 'Dimensions',                 'type': 'text',     'required': False,
+             'placeholder': 'e.g. A3, 60 × 90 cm, 18 × 24 inches'},
+            {'name': 'original_or_print',   'label': 'Original or print',          'type': 'select',   'required': True,
+             'options': [['original','Original artwork (one-of-a-kind)'],['limited_print','Limited edition print'],
+                         ['open_print','Open edition print'],['digital_file','Digital file / licence']]},
+            {'name': 'signed',              'label': 'Signed by artist',           'type': 'checkbox', 'required': False},
+            {'name': 'framed',              'label': 'Framed / mounted',           'type': 'checkbox', 'required': False},
+        ],
+        'rental': [
+            {'name': 'medium',              'label': 'Type',                       'type': 'select',   'required': False,
+             'options': [['painting','Painting'],['photography_print','Photography print'],
+                         ['sculpture','Sculpture'],['textile','Textile / Wall hanging'],['other','Other']]},
+            {'name': 'dimensions',          'label': 'Dimensions',                 'type': 'text',     'required': False,
+             'placeholder': 'e.g. 60 × 90 cm'},
+            {'name': 'framed',              'label': 'Framed / ready to hang',     'type': 'checkbox', 'required': False},
+            {'name': 'monthly_price',       'label': 'Monthly Rate (GHS)',         'type': 'number',   'required': False},
+            {'name': 'per_event_price',     'label': 'Per-event Rate (GHS)',       'type': 'number',   'required': False},
+        ],
+    },
+
+    # ── Food, Plants & Nature ───────────────────────────────────────────────
+    'food_plants': {
+        'trade': [
+            {'name': 'item_type',           'label': 'Type',                       'type': 'select',   'required': False,
+             'options': [['indoor_plant','Indoor plant'],['outdoor_plant','Outdoor / Garden plant'],
+                         ['succulent','Succulent / Cactus'],['tropical','Tropical plant'],
+                         ['fruit_tree','Fruit tree / seedling'],['herbs','Herbs / Medicinal plant'],
+                         ['food_produce','Food & Produce'],['seeds','Seeds / Bulbs']]},
+            {'name': 'pot_size',            'label': 'Pot size',                   'type': 'select',   'required': False,
+             'options': [['small','Small (under 15 cm)'],['medium','Medium (15–30 cm)'],
+                         ['large','Large (over 30 cm)'],['unpotted','Unpotted / bare root'],['na','Not applicable']]},
+            {'name': 'care_level',          'label': 'Care difficulty',            'type': 'select',   'required': False,
+             'options': [['easy','Easy — thrives with minimal attention'],
+                         ['moderate','Moderate — weekly watering & light'],
+                         ['demanding','Demanding — needs daily attention']]},
+            {'name': 'quantity',            'label': 'Quantity / amount',          'type': 'text',     'required': False,
+             'placeholder': 'e.g. 1 plant, 500 g, 1 bunch'},
+        ],
+        'rental': [
+            {'name': 'item_type',           'label': 'Type',                       'type': 'select',   'required': False,
+             'options': [['indoor_plant','Indoor / potted plant'],['tropical','Tropical / statement plant'],
+                         ['floral_arrangement','Floral arrangement'],['artificial','Artificial plant / tree']]},
+            {'name': 'quantity_available',  'label': 'Units available',            'type': 'number',   'required': False,
+             'placeholder': 'e.g. 10 plants for event staging'},
+            {'name': 'per_event_price',     'label': 'Per-event Rate (GHS)',       'type': 'number',   'required': False},
+            {'name': 'weekly_price',        'label': 'Weekly Rate (GHS)',          'type': 'number',   'required': False},
+            {'name': 'delivery_setup',      'label': 'Delivery & styling included','type': 'checkbox', 'required': False},
+        ],
+    },
+
+    # ── Services & Commissions ──────────────────────────────────────────────
+    'services': {
+        'trade': [
+            {'name': 'delivery_method',     'label': 'How it is delivered',        'type': 'select',   'required': True,
+             'options': [['in_person','In-person (client comes to me / I travel)'],
+                         ['remote','Remote / Online'],['both','Both options available']]},
+            {'name': 'turnaround_days',     'label': 'Typical turnaround (days)',  'type': 'number',   'required': False,
+             'placeholder': 'e.g. 3', 'min': 0},
+            {'name': 'revisions',           'label': 'Revision rounds included',   'type': 'number',   'required': False,
+             'placeholder': 'e.g. 2', 'min': 0},
+            {'name': 'portfolio_link',      'label': 'Portfolio / sample work',    'type': 'text',     'required': False,
+             'placeholder': 'e.g. instagram.com/yourpage or behance.net/you'},
+        ],
+        'rental': [
+            {'name': 'delivery_method',     'label': 'Availability',               'type': 'select',   'required': True,
+             'options': [['in_person','In-person'],['remote','Remote / Online'],['both','Both']]},
+            {'name': 'hourly_rate',         'label': 'Hourly Rate (GHS)',          'type': 'number',   'required': False},
+            {'name': 'daily_rate',          'label': 'Daily Rate (GHS)',           'type': 'number',   'required': False},
+            {'name': 'min_booking_hours',   'label': 'Minimum booking (hours)',    'type': 'number',   'required': False,
+             'placeholder': 'e.g. 2'},
+        ],
+    },
+}
+
+
 # ---------------------------------------------------------------------------
 # Market price cache (keyed by normalised item title, populated from Jiji)
 # ---------------------------------------------------------------------------
@@ -627,7 +1077,7 @@ class Listing(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField()
     category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
-    subcategory = models.CharField(max_length=50, choices=SUBCATEGORY_FLAT_CHOICES, blank=True)
+    subcategory = models.CharField(max_length=50, blank=True)
     condition = models.CharField(max_length=20, choices=CONDITION_CHOICES, blank=True)
     listing_type = models.CharField(max_length=20, choices=LISTING_TYPE_CHOICES, default='physical')
     transaction_type = models.CharField(max_length=10, choices=TRANSACTION_TYPE_CHOICES, default='trade')
@@ -707,6 +1157,14 @@ class Listing(models.Model):
     ai_enrichment_flagged = models.BooleanField(default=False)
     ai_enrichment_admin_edited = models.BooleanField(default=False)
 
+    # Category-specific structured attributes (e.g. vehicle specs)
+    attributes = models.JSONField(null=True, blank=True)
+
+    # SEO fields (populated by AI on approval)
+    slug = models.SlugField(max_length=230, unique=True, blank=True)
+    seo_title = models.CharField(max_length=70, blank=True)
+    seo_description = models.CharField(max_length=160, blank=True)
+
     # Status
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending_review')
     rejection_reason = models.TextField(blank=True)
@@ -722,6 +1180,10 @@ class Listing(models.Model):
         if self.listing_behaviour == 'temporary' and self.duration_days and not self.expires_at:
             self.expires_at = timezone.now() + timedelta(days=self.duration_days)
         super().save(*args, **kwargs)
+        if not self.slug and self.pk:
+            from django.utils.text import slugify
+            self.slug = f"{slugify(self.title)[:200]}-{self.pk}"
+            super().save(update_fields=['slug'])
 
     @property
     def primary_photo(self):
@@ -1006,7 +1468,11 @@ def enrich_listing_with_ai(listing):
         'Be concise. Use Ghanaian market context.\n\n'
         'Return ONLY valid JSON with these fields (omit fields you cannot determine):\n'
         '{"brand": "", "model": "", "key_specs": [], "condition_notes": "", '
-        '"market_context": "", "tags": [], "value_source_note": ""}'
+        '"market_context": "", "tags": [], "value_source_note": "", '
+        '"seo_title": "", "seo_description": ""}\n\n'
+        'For seo_title: 50-70 chars, Google-optimised, include location if known, e.g. '
+        '"Used iPhone 12 64GB — Trade or Swap in Accra, Ghana".\n'
+        'For seo_description: 120-160 chars describing the listing for search result snippets.'
     )
 
     try:
@@ -1037,8 +1503,17 @@ def enrich_listing_with_ai(listing):
         source = listing.market_price.source if listing.market_price else 'category_baseline'
         enrichment['value_source'] = source
 
+    seo_title = enrichment.pop('seo_title', '')[:70]
+    seo_description = enrichment.pop('seo_description', '')[:160]
     listing.ai_enrichment = enrichment
-    listing.save(update_fields=['ai_enrichment'])
+    update_fields = ['ai_enrichment']
+    if seo_title and not listing.seo_title:
+        listing.seo_title = seo_title
+        update_fields.append('seo_title')
+    if seo_description and not listing.seo_description:
+        listing.seo_description = seo_description
+        update_fields.append('seo_description')
+    listing.save(update_fields=update_fields)
 
 
 def validate_and_correct_listing_category(listing):
@@ -1050,12 +1525,14 @@ def validate_and_correct_listing_category(listing):
     if not api_key:
         return None
 
+    active_cats = get_active_categories()
+    sub_map = get_subcategory_map()
     category_map = _json.dumps({
         slug: {
             'label': label,
-            'subcategories': {s: l for s, l in SUBCATEGORY_CHOICES.get(slug, [])},
+            'subcategories': {s: l for s, l in sub_map.get(slug, [])},
         }
-        for slug, label in CATEGORY_CHOICES
+        for slug, label in active_cats
     }, indent=2)
 
     prompt = (
@@ -1100,8 +1577,8 @@ def validate_and_correct_listing_category(listing):
     new_cat = result.get('category', '').strip()
     new_sub = result.get('subcategory', '').strip()
 
-    valid_cats = {slug for slug, _ in CATEGORY_CHOICES}
-    valid_subs = {slug for subs in SUBCATEGORY_CHOICES.values() for slug, _ in subs}
+    valid_cats = {slug for slug, _ in active_cats}
+    valid_subs = {slug for subs in sub_map.values() for slug, _ in subs}
 
     if new_cat not in valid_cats:
         return None
@@ -1390,6 +1867,24 @@ class Offer(models.Model):
         lines.append("Are you interested?")
         text = "\n".join(lines)
         return f"https://wa.me/{number}?text={urllib.parse.quote(text)}"
+
+
+# ---------------------------------------------------------------------------
+# Category cache invalidation signals
+# ---------------------------------------------------------------------------
+
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
+
+
+@receiver([post_save, post_delete], sender=Category)
+def _invalidate_on_category_change(sender, **kwargs):
+    invalidate_category_cache()
+
+
+@receiver([post_save, post_delete], sender=Subcategory)
+def _invalidate_on_subcategory_change(sender, **kwargs):
+    invalidate_category_cache()
 
 
 # ---------------------------------------------------------------------------

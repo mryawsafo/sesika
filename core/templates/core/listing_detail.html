@@ -1,6 +1,44 @@
 {% extends "core/base.html" %}
+{% load sesika_extras %}
 
-{% block title %}{{ listing.title }} – Sesika{% endblock %}
+{% block title %}{{ listing.seo_title|default:listing.title }} – Sesika{% endblock %}
+
+{% block meta_description %}
+<meta name="description" content="{{ listing.seo_description|default:listing.description|truncatechars:160 }}">
+<link rel="canonical" href="https://{{ request.get_host }}/listings/{{ listing.pk }}/">
+{% endblock %}
+
+{% block og_tags %}
+<meta property="og:type" content="product">
+<meta property="og:title" content="{{ listing.seo_title|default:listing.title }}">
+<meta property="og:description" content="{{ listing.seo_description|default:listing.description|truncatechars:160 }}">
+<meta property="og:url" content="https://{{ request.get_host }}/listings/{{ listing.pk }}/">
+{% if listing.primary_photo %}<meta property="og:image" content="{{ listing.primary_photo.image.url }}">{% endif %}
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ listing.seo_title|default:listing.title }}">
+<meta name="twitter:description" content="{{ listing.seo_description|default:listing.description|truncatechars:160 }}">
+{% if listing.primary_photo %}<meta name="twitter:image" content="{{ listing.primary_photo.image.url }}">{% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": "{{ listing.title|escapejs }}",
+  "description": "{{ listing.description|truncatechars:300|escapejs }}",
+  "url": "https://{{ request.get_host }}/listings/{{ listing.pk }}/",
+  {% if listing.primary_photo %}"image": "{{ listing.primary_photo.image.url }}",{% endif %}
+  "offers": {
+    "@type": "Offer",
+    "priceCurrency": "GHS",
+    "price": "{{ listing.user_estimated_value }}",
+    "availability": "{% if listing.status == 'active' %}https://schema.org/InStock{% else %}https://schema.org/OutOfStock{% endif %}"
+  }{% if listing.condition %},
+  "itemCondition": "{% if listing.condition == 'excellent' %}https://schema.org/NewCondition{% elif listing.condition == 'good' or listing.condition == 'fair' %}https://schema.org/UsedCondition{% else %}https://schema.org/DamagedCondition{% endif %}"{% endif %}
+}
+</script>
+{% endblock %}
 
 {% block content %}
 <div style="margin-bottom:16px;">
@@ -77,6 +115,23 @@
           {% if listing.model_name %}<div><span style="color:var(--text-3);">Model</span><br><strong>{{ listing.model_name }}</strong></div>{% endif %}
           {% if listing.size %}<div><span style="color:var(--text-3);">Size</span><br><strong>{{ listing.size }}</strong></div>{% endif %}
           {% if listing.colour %}<div><span style="color:var(--text-3);">Colour</span><br><strong>{{ listing.colour }}</strong></div>{% endif %}
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- Structured specifications (vehicle attributes etc.) -->
+    {% if listing.attributes %}
+      <div class="detail-section">
+        <div class="label-up" style="margin-bottom:8px;">Specifications</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 16px; font-size:0.85rem;">
+          {% for key, val in listing.attributes.items %}
+            {% if val is not None and val != '' %}
+              <div>
+                <span style="color:var(--text-3);">{{ key|replace:"_: " }}</span><br>
+                <strong>{{ val|yesno_smart }}</strong>
+              </div>
+            {% endif %}
+          {% endfor %}
         </div>
       </div>
     {% endif %}

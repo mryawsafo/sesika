@@ -14,9 +14,13 @@ urlpatterns = [
     path('profile/student/verify/', views.student_verify_request, name='student_verify_request'),
     path('profile/student/confirm/', views.student_verify_confirm, name='student_verify_confirm'),
 
+    # SEO / utility
+    path('robots.txt', views.robots_txt, name='robots_txt'),
+
     # Listings
     path('listings/new/', views.listing_create, name='listing_create'),
     path('listings/<int:pk>/', views.listing_detail, name='listing_detail'),
+    path('listings/<slug:slug>/', views.listing_by_slug, name='listing_by_slug'),
     path('listings/<int:pk>/edit/', views.listing_edit, name='listing_edit'),
     path('listings/<int:pk>/delete/', views.listing_delete, name='listing_delete'),
     path('listings/<int:pk>/pause/', views.listing_pause_toggle, name='listing_pause_toggle'),

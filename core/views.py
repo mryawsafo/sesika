@@ -24,6 +24,7 @@ from .models import (
     count_wishlist_demand, DeviceToken, LoginAttempt, UniversityDomain,
     CampusGroup, CampusMembership, TradeRating, enrich_listing_with_ai,
     validate_and_correct_listing_category, SiteSettings, GHANA_TOWNS,
+    get_active_categories, get_subcategory_map, CATEGORY_ATTRIBUTE_SCHEMAS,
 )
 from .forms import (
     LoginForm, ListingForm, OfferForm, WishlistItemForm, ProfileForm,
@@ -405,7 +406,7 @@ def home(request):
     from .models import GHANA_REGION_CHOICES
     return render(request, 'core/home.html', {
         'listings': listings,
-        'category_choices': CATEGORY_CHOICES,
+        'category_choices': get_active_categories(),
         'region_choices': GHANA_REGION_CHOICES,
         'towns_json': json.dumps(GHANA_TOWNS),
         'selected_category': category_filter,
@@ -461,10 +462,17 @@ def listing_create(request):
         return redirect('complete_profile')
 
     form = ListingForm(request.POST or None, request.FILES or None)
+    sub_map = get_subcategory_map()
 
     if request.method == 'POST' and form.is_valid():
         listing = form.save(commit=False)
         listing.user = user
+        raw_attrs = request.POST.get('attributes_json', '').strip()
+        if raw_attrs:
+            try:
+                listing.attributes = json.loads(raw_attrs)
+            except (ValueError, TypeError):
+                listing.attributes = None
         listing.save()
 
         # Handle photos (min 1 required)
@@ -475,7 +483,8 @@ def listing_create(request):
             return render(request, 'core/listing_form.html', {
                 'form': form,
                 'action': 'Create',
-                'subcategory_choices_json': json.dumps(SUBCATEGORY_CHOICES),
+                'subcategory_choices_json': json.dumps({k: list(v) for k, v in sub_map.items()}),
+                'attribute_schemas_json': json.dumps(CATEGORY_ATTRIBUTE_SCHEMAS),
                 'towns_json': json.dumps(GHANA_TOWNS),
             })
 
@@ -502,7 +511,8 @@ def listing_create(request):
     return render(request, 'core/listing_form.html', {
         'form': form,
         'action': 'Create',
-        'subcategory_choices_json': json.dumps(SUBCATEGORY_CHOICES),
+        'subcategory_choices_json': json.dumps({k: list(v) for k, v in sub_map.items()}),
+        'attribute_schemas_json': json.dumps(CATEGORY_ATTRIBUTE_SCHEMAS),
         'towns_json': json.dumps(GHANA_TOWNS),
     })
 
@@ -516,9 +526,16 @@ def listing_edit(request, pk):
         messages.error(request, 'You can only edit your own listings.')
         return redirect('listing_detail', pk=pk)
 
+    sub_map = get_subcategory_map()
     form = ListingForm(request.POST or None, request.FILES or None, instance=listing)
     if request.method == 'POST' and form.is_valid():
         listing = form.save(commit=False)
+        raw_attrs = request.POST.get('attributes_json', '').strip()
+        if raw_attrs:
+            try:
+                listing.attributes = json.loads(raw_attrs)
+            except (ValueError, TypeError):
+                pass
         listing.save()
 
         new_photos = request.FILES.getlist('photos')
@@ -536,7 +553,9 @@ def listing_edit(request, pk):
         'action': 'Edit',
         'listing': listing,
         'existing_photos': listing.all_photos,
-        'subcategory_choices_json': json.dumps(SUBCATEGORY_CHOICES),
+        'subcategory_choices_json': json.dumps({k: list(v) for k, v in sub_map.items()}),
+        'attribute_schemas_json': json.dumps(CATEGORY_ATTRIBUTE_SCHEMAS),
+        'existing_attributes_json': json.dumps(listing.attributes or {}),
         'towns_json': json.dumps(GHANA_TOWNS),
     })
 
@@ -1010,7 +1029,7 @@ def admin_seed_listing(request):
         return redirect('/admin/login/?next=/admin-tools/seed/')
 
     from .models import (
-        CATEGORY_CHOICES, CONDITION_CHOICES, GHANA_REGION_CHOICES,
+        CONDITION_CHOICES, GHANA_REGION_CHOICES,
         TRANSACTION_TYPE_CHOICES, LISTING_TYPE_CHOICES, CONTACT_REVEAL_CHOICES,
     )
 
@@ -1049,6 +1068,14 @@ def admin_seed_listing(request):
                 update_fields.append('contact_reveal_preference')
                 user.save(update_fields=update_fields)
 
+            raw_attrs = request.POST.get('attributes_json', '').strip()
+            attrs = None
+            if raw_attrs:
+                try:
+                    attrs = json.loads(raw_attrs)
+                except (ValueError, TypeError):
+                    pass
+
             listing = Listing(
                 user=user,
                 title=title,
@@ -1069,6 +1096,7 @@ def admin_seed_listing(request):
                 colour=request.POST.get('colour', ''),
                 listing_behaviour='permanent',
                 status='active',
+                attributes=attrs,
             )
             listing.save()
 
@@ -1080,16 +1108,44 @@ def admin_seed_listing(request):
             created_listing = listing
             success = f'Listing "{listing.title}" created for {user.name or user.phone} (pk={listing.pk})'
 
+    _sub_map = get_subcategory_map()
     return render(request, 'core/admin_seed_listing.html', {
         'success': success,
         'error': error,
         'created_listing': created_listing,
-        'category_choices': CATEGORY_CHOICES,
+        'category_choices': get_active_categories(),
         'condition_choices': CONDITION_CHOICES,
         'region_choices': GHANA_REGION_CHOICES,
         'transaction_type_choices': TRANSACTION_TYPE_CHOICES,
         'listing_type_choices': LISTING_TYPE_CHOICES,
-        'subcategory_choices_json': json.dumps(SUBCATEGORY_CHOICES),
+        'subcategory_choices_json': json.dumps({k: list(v) for k, v in _sub_map.items()}),
+        'attribute_schemas_json': json.dumps(CATEGORY_ATTRIBUTE_SCHEMAS),
         'contact_reveal_choices': CONTACT_REVEAL_CHOICES,
         'towns_json': json.dumps(GHANA_TOWNS),
     })
+
+
+# ---------------------------------------------------------------------------
+# SEO / utility views
+# ---------------------------------------------------------------------------
+
+def listing_by_slug(request, slug):
+    listing = get_object_or_404(Listing, slug=slug)
+    from django.http import HttpResponsePermanentRedirect
+    return HttpResponsePermanentRedirect(f'/listings/{listing.pk}/')
+
+
+def robots_txt(request):
+    from django.http import HttpResponse
+    host = request.get_host()
+    lines = [
+        'User-agent: *',
+        'Disallow: /admin/',
+        'Disallow: /admin-tools/',
+        'Disallow: /my/',
+        'Disallow: /otp/',
+        'Disallow: /profile/',
+        '',
+        f'Sitemap: https://{host}/sitemap.xml',
+    ]
+    return HttpResponse('\n'.join(lines), content_type='text/plain')
