@@ -40,6 +40,10 @@ class LoginForm(forms.Form):
 
 
 class ListingForm(forms.ModelForm):
+    category = forms.ChoiceField(
+        choices=[],
+        label='Category',
+    )
     subcategory = forms.ChoiceField(
         choices=[('', '— Select subcategory —')],
         label='Subcategory',
@@ -278,6 +282,12 @@ class CounterOfferForm(forms.Form):
 
 
 class WishlistItemForm(forms.ModelForm):
+    category = forms.ChoiceField(
+        choices=[],
+        label='Category',
+        required=False,
+    )
+
     class Meta:
         model = WishlistItem
         fields = [
@@ -313,7 +323,6 @@ class WishlistItemForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['category'].choices = [('', '— Any category —')] + list(get_active_categories())
-        self.fields['category'].required = False
 
 
 class ProfileForm(forms.ModelForm):
