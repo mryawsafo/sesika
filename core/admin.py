@@ -1,3 +1,4 @@
+from django import forms as django_forms
 from django.contrib import admin
 from django.utils.html import format_html
 from django.utils.text import slugify
@@ -8,7 +9,21 @@ from .models import (
     match_listing_to_wishlists, match_want_text_to_listings,
     validate_and_correct_listing_category, enrich_listing_with_ai,
     DeviceToken, LoginAttempt, Category, Subcategory, invalidate_category_cache,
+    get_active_categories,
 )
+
+
+class ListingAdminForm(django_forms.ModelForm):
+    category = django_forms.ChoiceField(choices=[], required=False)
+
+    class Meta:
+        model = Listing
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        active_cats = get_active_categories()
+        self.fields['category'].choices = [('', '— Select category —')] + list(active_cats)
 
 
 @admin.register(BarterUser)
@@ -96,6 +111,7 @@ class MarketPriceAdmin(admin.ModelAdmin):
 
 @admin.register(Listing)
 class ListingAdmin(admin.ModelAdmin):
+    form = ListingAdminForm
     list_display = (
         'title', 'user', 'category', 'condition', 'transaction_type',
         'listing_type', 'market_price_display', 'final_estimated_value',
