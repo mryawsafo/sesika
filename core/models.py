@@ -1069,7 +1069,7 @@ class Listing(models.Model):
     # Core details
     title = models.CharField(max_length=200)
     description = models.TextField()
-    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    category = models.CharField(max_length=50)
     subcategory = models.CharField(max_length=50, blank=True)
     condition = models.CharField(max_length=20, choices=CONDITION_CHOICES, blank=True)
     listing_type = models.CharField(max_length=20, choices=LISTING_TYPE_CHOICES, default='physical')
@@ -1292,7 +1292,7 @@ class WishlistItem(models.Model):
     user = models.ForeignKey(BarterUser, on_delete=models.CASCADE, related_name='wishlist_items')
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, blank=True)
+    category = models.CharField(max_length=50, blank=True)
     max_budget = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     want_type = models.CharField(max_length=10, choices=WANT_TYPE_CHOICES, default='acquire')
     term_type = models.CharField(max_length=20, choices=TERM_TYPE_CHOICES, default='long_term')
