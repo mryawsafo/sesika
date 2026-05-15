@@ -1165,6 +1165,10 @@ class Listing(models.Model):
     seo_title = models.CharField(max_length=70, blank=True)
     seo_description = models.CharField(max_length=160, blank=True)
 
+    # User-suggested category (filled when user picks "Other" on the listing form)
+    suggested_category = models.CharField(max_length=100, blank=True)
+    suggested_subcategory = models.CharField(max_length=100, blank=True)
+
     # Status
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending_review')
     rejection_reason = models.TextField(blank=True)

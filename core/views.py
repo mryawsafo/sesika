@@ -473,6 +473,9 @@ def listing_create(request):
                 listing.attributes = json.loads(raw_attrs)
             except (ValueError, TypeError):
                 listing.attributes = None
+        if listing.category == 'other':
+            listing.suggested_category = request.POST.get('suggested_category', '').strip()
+            listing.suggested_subcategory = request.POST.get('suggested_subcategory', '').strip()
         listing.save()
 
         # Handle photos (min 1 required)
@@ -536,6 +539,12 @@ def listing_edit(request, pk):
                 listing.attributes = json.loads(raw_attrs)
             except (ValueError, TypeError):
                 pass
+        if listing.category == 'other':
+            listing.suggested_category = request.POST.get('suggested_category', '').strip()
+            listing.suggested_subcategory = request.POST.get('suggested_subcategory', '').strip()
+        else:
+            listing.suggested_category = ''
+            listing.suggested_subcategory = ''
         listing.save()
 
         new_photos = request.FILES.getlist('photos')

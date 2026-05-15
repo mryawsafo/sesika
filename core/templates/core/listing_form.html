@@ -58,6 +58,26 @@
         {% if form.subcategory.errors %}<ul class="errorlist">{% for e in form.subcategory.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
       </div>
 
+      <!-- Suggest a new category (revealed when "Other" is selected) -->
+      <div id="suggest-category-group" style="display:none; background:var(--surface-2,#f9f9f9); border:1px solid var(--border-soft); border-radius:12px; padding:14px 16px; margin-bottom:1rem;">
+        <div style="font-size:0.82rem; font-weight:600; color:var(--text-2); margin-bottom:10px; text-transform:uppercase; letter-spacing:0.04em;">Suggest a new category</div>
+        <div style="font-size:0.83rem; color:var(--text-3); margin-bottom:12px;">We'll review your suggestion and add it to the platform when your listing is approved.</div>
+        <div class="form-row">
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Category name <span class="req">*</span></label>
+            <input type="text" name="suggested_category" id="id_suggested_category"
+                   placeholder="e.g. Pets &amp; Animals, Musical Instruments"
+                   value="{{ listing.suggested_category|default:'' }}">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Subcategory <span style="color:var(--text-3); font-weight:400;">(optional)</span></label>
+            <input type="text" name="suggested_subcategory" id="id_suggested_subcategory"
+                   placeholder="e.g. Dogs, Guitars"
+                   value="{{ listing.suggested_subcategory|default:'' }}">
+          </div>
+        </div>
+      </div>
+
       <!-- Condition (hidden for services) -->
       <div class="form-group" id="condition-group">
         <label class="form-label" for="{{ form.condition.id_for_label }}">
@@ -295,6 +315,7 @@
   var subEl        = document.getElementById('id_subcategory');
   var subGroup     = document.getElementById('subcategory-group');
   var subLabel     = document.getElementById('subcategory-label');
+  var suggestGroup = document.getElementById('suggest-category-group');
   var typeEl       = document.getElementById('id_listing_type');
   var txnEl        = document.getElementById('id_transaction_type');
   var behaviourEl  = document.getElementById('id_listing_behaviour');
@@ -306,6 +327,12 @@
 
   function refreshSubcategory(preserve) {
     if (!catEl || !subEl) return;
+    var isOther = catEl.value === 'other';
+    if (suggestGroup) suggestGroup.style.display = isOther ? 'block' : 'none';
+    if (isOther) {
+      if (subGroup) subGroup.style.display = 'none';
+      return;
+    }
     var subs = subcatChoices[catEl.value] || [];
     subEl.innerHTML = '<option value="">— Select subcategory —</option>';
     subs.forEach(function(pair) {
@@ -412,6 +439,7 @@
     var section = document.getElementById('attributes-section');
     var fieldsDiv = document.getElementById('attributes-fields');
     if (!section || !fieldsDiv) return;
+    if (cat === 'other') { section.style.display = 'none'; return; }
     var schema = (attrSchemas[cat] || {})[txn];
     if (!schema || schema.length === 0) { section.style.display = 'none'; return; }
     section.style.display = '';
