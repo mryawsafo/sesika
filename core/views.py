@@ -2,8 +2,13 @@ import json
 import logging
 import random
 import string
+import threading
 import uuid
 from decimal import Decimal
+from urllib.parse import urlparse
+from django.core.cache import cache
+from django.core.paginator import Paginator
+from django.db import connection as _db_connection
 from django.db.models import Count, Avg
 
 logger = logging.getLogger(__name__)
@@ -25,6 +30,7 @@ from .models import (
     CampusGroup, CampusMembership, TradeRating, enrich_listing_with_ai,
     validate_and_correct_listing_category, SiteSettings, GHANA_TOWNS,
     get_active_categories, get_subcategory_map, CATEGORY_ATTRIBUTE_SCHEMAS,
+    ListingReport, REPORT_REASON_CHOICES,
 )
 from .forms import (
     LoginForm, ListingForm, OfferForm, WishlistItemForm, ProfileForm,
@@ -35,6 +41,17 @@ from .forms import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _run_bg(fn, *args, **kwargs):
+    def target():
+        try:
+            fn(*args, **kwargs)
+        except Exception:
+            logger.exception("Background task %s failed", fn.__name__)
+        finally:
+            _db_connection.close()
+    threading.Thread(target=target, daemon=True).start()
+
 
 def get_current_user(request):
     user_id = request.session.get('barter_user_id')
@@ -154,22 +171,28 @@ def request_otp(request):
         action = request.POST.get('action')
 
         if action == 'generate':
-            try:
-                resp = http_client.post(
-                    f"{settings.FREE_OTP_SERVICE_URL}/v1/verifications/",
-                    json={"phone_number": user.phone},
-                    timeout=10,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                request.session['otp_verification_id'] = str(data['id'])
-                request.session['otp_whatsapp_url'] = data['whatsapp_url']
-                request.session['otp_token'] = data['token']
-                whatsapp_url = data['whatsapp_url']
-                token = data['token']
-            except Exception as e:
-                logger.error("OTP generate failed — URL: %s | Error: %s", settings.FREE_OTP_SERVICE_URL, e)
-                error = 'Could not reach verification service. Please try again.'
+            rate_key = f'otp_rate_{user.phone}'
+            attempts = cache.get(rate_key, 0)
+            if attempts >= 3:
+                error = 'Too many verification requests. Please wait 10 minutes before trying again.'
+            else:
+                cache.set(rate_key, attempts + 1, timeout=600)
+                try:
+                    resp = http_client.post(
+                        f"{settings.FREE_OTP_SERVICE_URL}/v1/verifications/",
+                        json={"phone_number": user.phone},
+                        timeout=10,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    request.session['otp_verification_id'] = str(data['id'])
+                    request.session['otp_whatsapp_url'] = data['whatsapp_url']
+                    request.session['otp_token'] = data['token']
+                    whatsapp_url = data['whatsapp_url']
+                    token = data['token']
+                except Exception as e:
+                    logger.error("OTP generate failed — URL: %s | Error: %s", settings.FREE_OTP_SERVICE_URL, e)
+                    error = 'Could not reach verification service. Please try again.'
 
         elif action == 'check':
             verification_id = request.session.get('otp_verification_id')
@@ -275,10 +298,12 @@ def update_profile(request):
         messages.success(request, 'Profile updated.')
         return redirect('profile')
     avg_rating = TradeRating.objects.filter(rated_user=user).aggregate(avg=Avg('score'))['avg']
+    completed_trades = TradeRating.objects.filter(rated_user=user).values('offer').distinct().count()
     return render(request, 'core/profile.html', {
         'barter_user': user,
         'form': form,
         'avg_rating': avg_rating,
+        'completed_trades': completed_trades,
         'ratings': TradeRating.objects.filter(rated_user=user).select_related('rater').order_by('-created_at')[:10],
         'towns_json': json.dumps(GHANA_TOWNS),
     })
@@ -307,6 +332,7 @@ def student_verify_request(request):
             else:
                 otp = _generate_otp()
                 request.session['student_otp'] = otp
+                request.session['student_otp_expires'] = (timezone.now() + timezone.timedelta(minutes=10)).isoformat()
                 request.session['student_email_pending'] = email
                 try:
                     send_mail(
@@ -343,14 +369,25 @@ def student_verify_confirm(request):
     if request.method == 'POST':
         code = request.POST.get('code', '').strip()
         expected = request.session.get('student_otp')
-        if not code or code != expected:
+        expires_str = request.session.get('student_otp_expires')
+        otp_expired = False
+        if expires_str:
+            from django.utils.dateparse import parse_datetime
+            expires = parse_datetime(expires_str)
+            if expires and timezone.now() > expires:
+                otp_expired = True
+        if otp_expired:
+            for key in ('student_otp', 'student_otp_expires', 'student_email_pending'):
+                request.session.pop(key, None)
+            error = 'Verification code expired. Please request a new one.'
+        elif not code or code != expected:
             error = 'Incorrect code. Please try again.'
         else:
             user.student_email = email
             user.is_student_verified = True
             user.student_verified_at = timezone.now()
             user.save(update_fields=['student_email', 'is_student_verified', 'student_verified_at'])
-            for key in ('student_otp', 'student_email_pending'):
+            for key in ('student_otp', 'student_otp_expires', 'student_email_pending'):
                 request.session.pop(key, None)
 
             domain = email.split('@')[-1]
@@ -380,20 +417,23 @@ def student_verify_confirm(request):
 # ---------------------------------------------------------------------------
 
 def home(request):
-    listings = Listing.objects.filter(status='active').select_related('user').prefetch_related('photos')
+    listings_qs = Listing.objects.filter(status='active').select_related('user').prefetch_related('photos')
     category_filter = request.GET.get('category', '')
     transaction_filter = request.GET.get('type', '')
     region_filter = request.GET.get('region', '')
     city_filter = request.GET.get('city', '')
 
     if category_filter:
-        listings = listings.filter(category=category_filter)
+        listings_qs = listings_qs.filter(category=category_filter)
     if transaction_filter in ('trade', 'rental'):
-        listings = listings.filter(transaction_type=transaction_filter)
+        listings_qs = listings_qs.filter(transaction_type=transaction_filter)
     if region_filter:
-        listings = listings.filter(location_region=region_filter)
+        listings_qs = listings_qs.filter(location_region=region_filter)
     if city_filter:
-        listings = listings.filter(location_city__iexact=city_filter)
+        listings_qs = listings_qs.filter(location_city__iexact=city_filter)
+
+    paginator = Paginator(listings_qs, 24)
+    page_obj = paginator.get_page(request.GET.get('page', 1))
 
     current_user = get_current_user(request)
     saved_pks = set()
@@ -405,7 +445,8 @@ def home(request):
 
     from .models import GHANA_REGION_CHOICES
     return render(request, 'core/home.html', {
-        'listings': listings,
+        'listings': page_obj,
+        'page_obj': page_obj,
         'category_choices': get_active_categories(),
         'region_choices': GHANA_REGION_CHOICES,
         'towns_json': json.dumps(GHANA_TOWNS),
@@ -417,8 +458,8 @@ def home(request):
     })
 
 
-def listing_detail(request, pk):
-    listing = get_object_or_404(Listing, pk=pk)
+def _render_listing_detail(request, listing):
+    from django.http import HttpResponsePermanentRedirect
     current_user = get_current_user(request)
 
     user_offer = None
@@ -433,14 +474,18 @@ def listing_detail(request, pk):
     photos = listing.all_photos
     is_owner = current_user and current_user.pk == listing.user.pk
 
-    show_ai = (
-        listing.ai_enrichment
-        and not listing.ai_enrichment_hidden
-    )
+    show_ai = listing.ai_enrichment and not listing.ai_enrichment_hidden
 
     wishlist_count = 0
     if is_owner:
         wishlist_count = WishlistItem.objects.filter(user=current_user, is_active=True).count()
+
+    similar = (
+        Listing.objects.filter(status='active', category=listing.category)
+        .exclude(pk=listing.pk)
+        .select_related('user')
+        .prefetch_related('photos')[:4]
+    )
 
     return render(request, 'core/listing_detail.html', {
         'listing': listing,
@@ -452,7 +497,16 @@ def listing_detail(request, pk):
         'show_ai': show_ai,
         'contact_revealed': user_offer and _should_reveal_contact(user_offer),
         'wishlist_count': wishlist_count,
+        'similar_listings': similar,
     })
+
+
+def listing_detail(request, pk):
+    listing = get_object_or_404(Listing, pk=pk)
+    if listing.slug:
+        from django.http import HttpResponsePermanentRedirect
+        return HttpResponsePermanentRedirect(f'/listings/{listing.slug}/')
+    return _render_listing_detail(request, listing)
 
 
 @verified_required
@@ -476,25 +530,44 @@ def listing_create(request):
         if listing.category == 'other':
             listing.suggested_category = request.POST.get('suggested_category', '').strip()
             listing.suggested_subcategory = request.POST.get('suggested_subcategory', '').strip()
+        elif listing.subcategory == 'other_sub':
+            listing.subcategory = ''
+            listing.suggested_subcategory = request.POST.get('suggested_subcategory_new', '').strip()
         listing.save()
 
         # Handle photos (min 1 required)
         photo_files = request.FILES.getlist('photos')
         if not photo_files:
-            form.add_error('photos', 'Please upload at least 1 photo.')
+            form.add_error(None, 'Please upload at least 1 photo.')
             listing.delete()
             return render(request, 'core/listing_form.html', {
                 'form': form,
                 'action': 'Create',
                 'subcategory_choices_json': json.dumps({k: list(v) for k, v in sub_map.items()}),
                 'attribute_schemas_json': json.dumps(CATEGORY_ATTRIBUTE_SCHEMAS),
+                'existing_attributes_json': request.POST.get('attributes_json', '{}'),
                 'towns_json': json.dumps(GHANA_TOWNS),
             })
 
+        allowed_types = {'image/jpeg', 'image/png', 'image/webp', 'image/gif'}
+        invalid = [f.name for f in photo_files if f.content_type not in allowed_types]
+        if invalid:
+            listing.delete()
+            form.add_error(None, f'Invalid file type: {", ".join(invalid)}. Only JPEG, PNG, WebP, or GIF allowed.')
+            return render(request, 'core/listing_form.html', {
+                'form': form,
+                'action': 'Create',
+                'subcategory_choices_json': json.dumps({k: list(v) for k, v in sub_map.items()}),
+                'attribute_schemas_json': json.dumps(CATEGORY_ATTRIBUTE_SCHEMAS),
+                'existing_attributes_json': request.POST.get('attributes_json', '{}'),
+                'towns_json': json.dumps(GHANA_TOWNS),
+            })
         for i, photo_file in enumerate(photo_files[:3], start=1):
             ListingPhoto.objects.create(listing=listing, image=photo_file, order=i)
 
-        listing.compute_and_save_value()
+        _run_bg(listing.compute_and_save_value)
+        _run_bg(enrich_listing_with_ai, listing)
+        _run_bg(match_listing_to_wishlists, listing)
 
         demand_count = count_wishlist_demand(listing)
         if demand_count > 0:
@@ -542,6 +615,10 @@ def listing_edit(request, pk):
         if listing.category == 'other':
             listing.suggested_category = request.POST.get('suggested_category', '').strip()
             listing.suggested_subcategory = request.POST.get('suggested_subcategory', '').strip()
+        elif listing.subcategory == 'other_sub':
+            listing.subcategory = ''
+            listing.suggested_subcategory = request.POST.get('suggested_subcategory_new', '').strip()
+            listing.suggested_category = ''
         else:
             listing.suggested_category = ''
             listing.suggested_subcategory = ''
@@ -549,11 +626,23 @@ def listing_edit(request, pk):
 
         new_photos = request.FILES.getlist('photos')
         if new_photos:
+            allowed_types = {'image/jpeg', 'image/png', 'image/webp', 'image/gif'}
+            invalid = [f.name for f in new_photos if f.content_type not in allowed_types]
+            if invalid:
+                messages.error(request, f'Invalid file type: {", ".join(invalid)}. Only JPEG, PNG, WebP, or GIF allowed.')
+                return render(request, 'core/listing_form.html', {
+                    'form': form, 'action': 'Edit', 'listing': listing,
+                    'existing_photos': listing.all_photos,
+                    'subcategory_choices_json': json.dumps({k: list(v) for k, v in sub_map.items()}),
+                    'attribute_schemas_json': json.dumps(CATEGORY_ATTRIBUTE_SCHEMAS),
+                    'existing_attributes_json': json.dumps(listing.attributes or {}),
+                    'towns_json': json.dumps(GHANA_TOWNS),
+                })
             listing.photos.all().delete()
             for i, photo_file in enumerate(new_photos[:3], start=1):
                 ListingPhoto.objects.create(listing=listing, image=photo_file, order=i)
 
-        listing.compute_and_save_value()
+        _run_bg(listing.compute_and_save_value)
         messages.success(request, 'Listing updated.')
         return redirect('listing_detail', pk=listing.pk)
 
@@ -886,6 +975,13 @@ def trade_complete(request, offer_pk):
         message=f'{user.name or user.phone} left you a {score}/5 rating for the "{offer.listing.title}" trade.',
         link='/profile/',
     )
+    Notification.objects.create(
+        user=user,
+        type='trade_completed',
+        message=f'Trade complete: "{offer.listing.title}". Thank you for trading on Sesika!',
+        link='/my/offers/',
+        source_listing=offer.listing,
+    )
     offer.listing.status = 'traded'
     offer.listing.save(update_fields=['status'])
     messages.success(request, '⭐ Trade rated. Thank you!')
@@ -910,7 +1006,9 @@ def listing_save_toggle(request, pk):
         messages.success(request, 'Listing saved.')
     next_url = request.POST.get('next') or request.GET.get('next')
     if next_url:
-        return redirect(next_url)
+        parsed = urlparse(next_url)
+        if not parsed.netloc and not parsed.scheme:
+            return redirect(next_url)
     return redirect('listing_detail', pk=pk)
 
 
@@ -1018,6 +1116,35 @@ def notification_click(request, pk):
 
 
 # ---------------------------------------------------------------------------
+# Report listing
+# ---------------------------------------------------------------------------
+
+@login_required_barter
+@require_POST
+def report_listing(request, pk):
+    listing = get_object_or_404(Listing, pk=pk)
+    user = get_current_user(request)
+    if listing.user.pk == user.pk:
+        messages.error(request, 'You cannot report your own listing.')
+        return redirect('listing_detail', pk=pk)
+    reason = request.POST.get('reason', '')
+    valid_reasons = {r for r, _ in REPORT_REASON_CHOICES}
+    if reason not in valid_reasons:
+        messages.error(request, 'Please select a reason.')
+        return redirect('listing_detail', pk=pk)
+    _, created = ListingReport.objects.get_or_create(
+        listing=listing,
+        reporter=user,
+        defaults={'reason': reason, 'notes': request.POST.get('notes', '').strip()[:500]},
+    )
+    if created:
+        messages.success(request, 'Thanks — your report has been submitted for review.')
+    else:
+        messages.info(request, 'You have already reported this listing.')
+    return redirect('listing_detail', pk=pk)
+
+
+# ---------------------------------------------------------------------------
 # Static pages
 # ---------------------------------------------------------------------------
 
@@ -1113,7 +1240,7 @@ def admin_seed_listing(request):
             for i, f in enumerate(photo_files[:3], start=1):
                 ListingPhoto.objects.create(listing=listing, image=f, order=i)
 
-            listing.compute_and_save_value()
+            _run_bg(listing.compute_and_save_value)
             created_listing = listing
             success = f'Listing "{listing.title}" created for {user.name or user.phone} (pk={listing.pk})'
 
@@ -1139,9 +1266,9 @@ def admin_seed_listing(request):
 # ---------------------------------------------------------------------------
 
 def listing_by_slug(request, slug):
-    listing = get_object_or_404(Listing, slug=slug)
     from django.http import HttpResponsePermanentRedirect
-    return HttpResponsePermanentRedirect(f'/listings/{listing.pk}/')
+    listing = get_object_or_404(Listing, slug=slug)
+    return _render_listing_detail(request, listing)
 
 
 def robots_txt(request):

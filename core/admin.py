@@ -242,6 +242,20 @@ class ListingAdmin(admin.ModelAdmin):
                 listing.suggested_subcategory = ''
                 listing.save(update_fields=['category', 'subcategory', 'suggested_category', 'suggested_subcategory'])
                 new_cats.append(cat.label)
+            elif listing.category != 'other' and listing.suggested_subcategory:
+                try:
+                    cat = Category.objects.get(slug=listing.category)
+                    sub_slug = slugify(listing.suggested_subcategory)[:50]
+                    Subcategory.objects.get_or_create(
+                        category=cat, slug=sub_slug,
+                        defaults={'label': listing.suggested_subcategory, 'display_order': 99},
+                    )
+                    listing.subcategory = sub_slug
+                    listing.suggested_subcategory = ''
+                    listing.save(update_fields=['subcategory', 'suggested_subcategory'])
+                    invalidate_category_cache()
+                except Category.DoesNotExist:
+                    pass
 
             correction = validate_and_correct_listing_category(listing)
             if correction:

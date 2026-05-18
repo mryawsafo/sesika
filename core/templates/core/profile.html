@@ -23,6 +23,7 @@
         <div style="font-size:0.82rem; color:var(--text-3); margin-top:4px;">
           {{ barter_user.completed_trades_count }} completed trade{{ barter_user.completed_trades_count|pluralize }}
           {% if avg_rating %} · ⭐ {{ avg_rating|floatformat:1 }}/5{% endif %}
+          · Member since {{ barter_user.created_at|date:"M Y" }}
         </div>
       </div>
     </div>

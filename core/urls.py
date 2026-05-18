@@ -26,6 +26,7 @@ urlpatterns = [
     path('listings/<int:pk>/pause/', views.listing_pause_toggle, name='listing_pause_toggle'),
     path('listings/<int:pk>/ai/hide/', views.listing_ai_hide, name='listing_ai_hide'),
     path('listings/<int:pk>/ai/flag/', views.listing_ai_flag, name='listing_ai_flag'),
+    path('listings/<int:pk>/report/', views.report_listing, name='report_listing'),
 
     # Offers
     path('listings/<int:listing_pk>/offer/', views.offer_create, name='offer_create'),

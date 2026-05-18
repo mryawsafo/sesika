@@ -162,7 +162,7 @@ class ListingForm(forms.ModelForm):
         self.fields['category'].choices = (
             [('', '— Select category —')] + list(active_cats) + [('other', 'Other — suggest a new one')]
         )
-        self.fields['subcategory'].choices = [('', '— Select subcategory —')] + all_subs
+        self.fields['subcategory'].choices = [('', '— Select subcategory —')] + all_subs + [('other_sub', 'Other — suggest a new one')]
         self.fields['location_region'].choices = [('', '— Select region —')] + list(GHANA_REGION_CHOICES)
         self.fields['duration_days'].required = False
         self.fields['condition'].required = False
@@ -176,7 +176,7 @@ class ListingForm(forms.ModelForm):
         behaviour = cleaned.get('listing_behaviour')
         duration = cleaned.get('duration_days')
 
-        if subcategory and category and category != 'other':
+        if subcategory and subcategory != 'other_sub' and category and category != 'other':
             sub_map = get_subcategory_map()
             valid = {slug for slug, _ in sub_map.get(category, [])}
             if subcategory not in valid:

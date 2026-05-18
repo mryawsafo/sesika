@@ -58,6 +58,18 @@
         {% if form.subcategory.errors %}<ul class="errorlist">{% for e in form.subcategory.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
       </div>
 
+      <!-- Suggest a new subcategory (revealed when "Other subcategory" is selected) -->
+      <div id="suggest-subcategory-group" style="display:none; background:var(--surface-2,#f9f9f9); border:1px solid var(--border-soft); border-radius:12px; padding:14px 16px; margin-bottom:1rem;">
+        <div style="font-size:0.82rem; font-weight:600; color:var(--text-2); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.04em;">Suggest a new subcategory</div>
+        <div style="font-size:0.83rem; color:var(--text-3); margin-bottom:12px;">We'll review your suggestion and add it to the platform when your listing is approved.</div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Subcategory name <span class="req">*</span></label>
+          <input type="text" name="suggested_subcategory_new" id="id_suggested_subcategory_new"
+                 placeholder="e.g. Guitars, Dogs, Pottery"
+                 value="{{ listing.suggested_subcategory|default:'' }}">
+        </div>
+      </div>
+
       <!-- Suggest a new category (revealed when "Other" is selected) -->
       <div id="suggest-category-group" style="display:none; background:var(--surface-2,#f9f9f9); border:1px solid var(--border-soft); border-radius:12px; padding:14px 16px; margin-bottom:1rem;">
         <div style="font-size:0.82rem; font-weight:600; color:var(--text-2); margin-bottom:10px; text-transform:uppercase; letter-spacing:0.04em;">Suggest a new category</div>
@@ -98,7 +110,7 @@
 
       <!-- Physical item extras -->
       <div id="physical-fields">
-        <div class="form-row">
+        <div class="form-row" id="brand-model-group">
           <div class="form-group">
             <label class="form-label" for="{{ form.brand.id_for_label }}">Brand</label>
             {{ form.brand }}
@@ -108,17 +120,17 @@
             {{ form.model_name }}
           </div>
         </div>
-        <div class="form-row">
-          <div class="form-group">
+        <div class="form-row" id="size-colour-group">
+          <div class="form-group" id="size-group">
             <label class="form-label" for="{{ form.size.id_for_label }}">Size</label>
             {{ form.size }}
           </div>
-          <div class="form-group">
+          <div class="form-group" id="colour-group">
             <label class="form-label" for="{{ form.colour.id_for_label }}">Colour</label>
             {{ form.colour }}
           </div>
         </div>
-        <div class="form-group">
+        <div class="form-group" id="gender-group">
           <label class="form-label" for="{{ form.gender.id_for_label }}">Gender</label>
           {{ form.gender }}
         </div>
@@ -197,10 +209,9 @@
         </div>
       </div>
 
-      <!-- Category-specific attributes (vehicles etc.) -->
+      <!-- Category-specific attributes -->
       <div id="attributes-section" style="display:none;">
         <hr style="border:none; border-top:1px solid var(--border-soft); margin:12px 0 16px;">
-        <div style="font-size:0.9rem; font-weight:600; color:var(--text-2); margin-bottom:12px;">Specifications</div>
         <div id="attributes-fields"></div>
       </div>
       <input type="hidden" name="attributes_json" id="attributes_json_input">
@@ -236,7 +247,7 @@
 
       <!-- Collection method & cash top-up (trade only) -->
       <div id="trade-logistics" class="form-row">
-        <div class="form-group">
+        <div class="form-group" id="collection-method-group">
           <label class="form-label" for="{{ form.collection_method.id_for_label }}">Collection method</label>
           {{ form.collection_method }}
         </div>
@@ -268,6 +279,12 @@
           {% if form.duration_days.errors %}<ul class="errorlist">{% for e in form.duration_days.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
         </div>
       </div>
+
+      {% if form.non_field_errors %}
+        <div id="form-error-banner" class="errorlist" style="margin-bottom:1rem; padding:10px 14px; background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; color:#b91c1c; font-size:0.88rem;">
+          {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+        </div>
+      {% endif %}
 
       <!-- Photos -->
       <div class="form-group">
@@ -315,8 +332,9 @@
   var subEl        = document.getElementById('id_subcategory');
   var subGroup     = document.getElementById('subcategory-group');
   var subLabel     = document.getElementById('subcategory-label');
-  var suggestGroup = document.getElementById('suggest-category-group');
-  var typeEl       = document.getElementById('id_listing_type');
+  var suggestGroup    = document.getElementById('suggest-category-group');
+  var suggestSubGroup = document.getElementById('suggest-subcategory-group');
+  var typeEl          = document.getElementById('id_listing_type');
   var txnEl        = document.getElementById('id_transaction_type');
   var behaviourEl  = document.getElementById('id_listing_behaviour');
   var warrantyEl   = document.getElementById('id_warranty_offered');
@@ -331,6 +349,7 @@
     if (suggestGroup) suggestGroup.style.display = isOther ? 'block' : 'none';
     if (isOther) {
       if (subGroup) subGroup.style.display = 'none';
+      if (suggestSubGroup) suggestSubGroup.style.display = 'none';
       return;
     }
     var subs = subcatChoices[catEl.value] || [];
@@ -341,8 +360,17 @@
       if (pair[0] === preserve) o.selected = true;
       subEl.appendChild(o);
     });
+    if (subs.length > 0) {
+      var otherOpt = document.createElement('option');
+      otherOpt.value = 'other_sub';
+      otherOpt.textContent = 'Other — suggest a new one';
+      if (preserve === 'other_sub') otherOpt.selected = true;
+      subEl.appendChild(otherOpt);
+    }
     if (subLabel) subLabel.textContent = (catLabels[catEl.value] || 'Category') + ' › Subcategory';
     if (subGroup) subGroup.style.display = subs.length > 0 ? 'block' : 'none';
+    var isOtherSub = subEl.value === 'other_sub';
+    if (suggestSubGroup) suggestSubGroup.style.display = isOtherSub ? 'block' : 'none';
   }
 
   function refreshListingType() {
@@ -391,6 +419,9 @@
     if (fieldDef.type === 'checkbox') {
       wrapper.style.cssText = 'display:flex; align-items:center; gap:8px; margin-top:4px;';
     }
+    if (fieldDef.type === 'textarea') {
+      wrapper.style.gridColumn = 'span 2';
+    }
     var id = 'attr_' + fieldDef.name;
     var label = document.createElement('label');
     label.className = 'form-label';
@@ -412,12 +443,19 @@
       input = document.createElement('input');
       input.type = 'checkbox';
       if (existing[fieldDef.name] === true) input.checked = true;
+    } else if (fieldDef.type === 'textarea') {
+      input = document.createElement('textarea');
+      input.rows = 2;
+      if (fieldDef.placeholder) input.placeholder = fieldDef.placeholder;
+      var ev = existing[fieldDef.name];
+      if (ev !== undefined && ev !== null) input.value = ev;
     } else {
       input = document.createElement('input');
       input.type = fieldDef.type === 'number' ? 'number' : 'text';
       if (fieldDef.placeholder) input.placeholder = fieldDef.placeholder;
       if (fieldDef.min !== undefined) input.min = fieldDef.min;
       if (fieldDef.max !== undefined) input.max = fieldDef.max;
+      if (fieldDef.step !== undefined) input.step = fieldDef.step;
       var ev = existing[fieldDef.name];
       if (ev !== undefined && ev !== null) input.value = ev;
     }
@@ -433,30 +471,115 @@
     return wrapper;
   }
 
+  var GENDER_CATEGORIES  = {'fashion': true, 'sports_hobbies': true};
+  var BRAND_MODEL_CATS   = {'phones_tablets': true, 'computers': true};
+  var COLOUR_CATS        = {'phones_tablets': true};
+  var KNOWN_CATEGORIES   = {
+    'phones_tablets':1,'computers':1,'electronics':1,'gaming':1,'vehicles':1,
+    'fashion':1,'home_furniture':1,'health_beauty':1,'sports_hobbies':1,
+    'tools_equipment':1,'handmade_crafts':1,'art_creative':1,'food_plants':1,'services':1
+  };
+
+  var genderGroupEl         = document.getElementById('gender-group');
+  var brandModelGroup       = document.getElementById('brand-model-group');
+  var sizeColourGroup       = document.getElementById('size-colour-group');
+  var sizeGroup             = document.getElementById('size-group');
+  var colourGroup           = document.getElementById('colour-group');
+  var collectionMethodGroup = document.getElementById('collection-method-group');
+
+  function refreshCategoryFields() {
+    var cat = catEl ? catEl.value : '';
+    var isService = cat === 'services';
+    var isKnown   = !!KNOWN_CATEGORIES[cat];
+
+    if (genderGroupEl) genderGroupEl.style.display = GENDER_CATEGORIES[cat] ? '' : 'none';
+    if (collectionMethodGroup) collectionMethodGroup.style.display = isService ? 'none' : '';
+
+    if (!cat || !isKnown) {
+      if (brandModelGroup) brandModelGroup.style.display = '';
+      if (sizeColourGroup) sizeColourGroup.style.display = '';
+    } else {
+      if (brandModelGroup) brandModelGroup.style.display = BRAND_MODEL_CATS[cat] ? '' : 'none';
+      if (sizeGroup)       sizeGroup.style.display       = 'none';
+      if (colourGroup)     colourGroup.style.display     = COLOUR_CATS[cat] ? '' : 'none';
+      if (sizeColourGroup) {
+        var anyVisible = COLOUR_CATS[cat];
+        sizeColourGroup.style.display = anyVisible ? '' : 'none';
+      }
+    }
+
+    if (isService && typeEl && typeEl.value !== 'service') {
+      typeEl.value = 'service';
+      refreshListingType();
+    }
+  }
+
+  function sectionVisibleForSub(sec, sub) {
+    if (sec.subcategory_exclude && sub && sec.subcategory_exclude.indexOf(sub) >= 0) return false;
+    if (sec.subcategory_types && (!sub || sec.subcategory_types.indexOf(sub) < 0)) return false;
+    return true;
+  }
+
   function refreshAttributeSection() {
     var cat = catEl ? catEl.value : '';
     var txn = txnEl ? txnEl.value : 'trade';
+    var sub = subEl ? subEl.value : '';
     var section = document.getElementById('attributes-section');
     var fieldsDiv = document.getElementById('attributes-fields');
     if (!section || !fieldsDiv) return;
     if (cat === 'other') { section.style.display = 'none'; return; }
-    var schema = (attrSchemas[cat] || {})[txn];
-    if (!schema || schema.length === 0) { section.style.display = 'none'; return; }
-    section.style.display = '';
+    var catSchema = attrSchemas[cat] || {};
     fieldsDiv.innerHTML = '';
-    var grid = document.createElement('div');
-    grid.style.cssText = 'display:grid; grid-template-columns:1fr 1fr; gap:10px 16px;';
-    schema.forEach(function(fd) { grid.appendChild(buildAttributeField(fd, existingAttrs)); });
-    fieldsDiv.appendChild(grid);
+    if (catSchema.form_sections) {
+      var visibleSections = catSchema.form_sections.filter(function(s) {
+        if (s.transaction_types && s.transaction_types.indexOf(txn) < 0) return false;
+        return sectionVisibleForSub(s, sub);
+      });
+      if (!visibleSections.length) { section.style.display = 'none'; return; }
+      section.style.display = '';
+      visibleSections.forEach(function(sec) {
+        var secDiv = document.createElement('div');
+        secDiv.style.cssText = 'margin-bottom:20px;';
+        var heading = document.createElement('div');
+        heading.style.cssText = 'font-size:0.82rem; font-weight:600; color:var(--text-2); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--border-soft);';
+        heading.textContent = sec.label;
+        secDiv.appendChild(heading);
+        var grid = document.createElement('div');
+        grid.style.cssText = 'display:grid; grid-template-columns:1fr 1fr; gap:10px 16px;';
+        sec.fields.forEach(function(fd) { grid.appendChild(buildAttributeField(fd, existingAttrs)); });
+        secDiv.appendChild(grid);
+        fieldsDiv.appendChild(secDiv);
+      });
+    } else {
+      var schema = catSchema[txn];
+      if (!schema || !schema.length) { section.style.display = 'none'; return; }
+      section.style.display = '';
+      var grid = document.createElement('div');
+      grid.style.cssText = 'display:grid; grid-template-columns:1fr 1fr; gap:10px 16px;';
+      schema.forEach(function(fd) { grid.appendChild(buildAttributeField(fd, existingAttrs)); });
+      fieldsDiv.appendChild(grid);
+    }
   }
 
   function collectAttributes() {
     var cat = catEl ? catEl.value : '';
     var txn = txnEl ? txnEl.value : 'trade';
-    var schema = (attrSchemas[cat] || {})[txn];
-    if (!schema || schema.length === 0) return;
+    var sub = subEl ? subEl.value : '';
+    var catSchema = attrSchemas[cat] || {};
+    var allFields = [];
+    if (catSchema.form_sections) {
+      catSchema.form_sections.forEach(function(sec) {
+        if (sec.transaction_types && sec.transaction_types.indexOf(txn) < 0) return;
+        if (!sectionVisibleForSub(sec, sub)) return;
+        allFields = allFields.concat(sec.fields);
+      });
+    } else {
+      var schema = catSchema[txn];
+      if (schema) allFields = schema;
+    }
+    if (!allFields.length) return;
     var attrs = {};
-    schema.forEach(function(fd) {
+    allFields.forEach(function(fd) {
       var el = document.getElementById('attr_' + fd.name);
       if (!el) return;
       if (fd.type === 'checkbox') {
@@ -472,7 +595,16 @@
     document.getElementById('attributes_json_input').value = JSON.stringify(attrs);
   }
 
-  if (catEl)      catEl.addEventListener('change', function() { refreshSubcategory(''); refreshAttributeSection(); });
+  if (catEl)      catEl.addEventListener('change', function() { refreshSubcategory(''); refreshAttributeSection(); refreshCategoryFields(); });
+  if (subEl)      subEl.addEventListener('change', function() {
+    var isOtherSub = subEl.value === 'other_sub';
+    if (suggestSubGroup) suggestSubGroup.style.display = isOtherSub ? 'block' : 'none';
+    if (!isOtherSub) {
+      var inp = document.querySelector('[name="suggested_subcategory_new"]');
+      if (inp) inp.value = '';
+    }
+    refreshAttributeSection();
+  });
   if (typeEl)     typeEl.addEventListener('change', refreshListingType);
   if (txnEl)      txnEl.addEventListener('change', function() { refreshTransactionType(); refreshAttributeSection(); });
   if (behaviourEl) behaviourEl.addEventListener('change', refreshBehaviour);
@@ -480,7 +612,23 @@
   if (depositEl)  depositEl.addEventListener('change', refreshDeposit);
 
   var formEl = document.querySelector('form');
-  if (formEl) formEl.addEventListener('submit', collectAttributes);
+  if (formEl) formEl.addEventListener('submit', function(e) {
+    collectAttributes();
+    var photoInput = document.getElementById('photos-input');
+    var existing   = document.querySelector('#photo-preview img');
+    if (photoInput && photoInput.files.length === 0 && !existing) {
+      e.preventDefault();
+      var banner = document.getElementById('photo-error-inline');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'photo-error-inline';
+        banner.style.cssText = 'margin-top:8px; padding:8px 12px; background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; color:#b91c1c; font-size:0.85rem;';
+        photoInput.parentNode.insertBefore(banner, photoInput.nextSibling);
+      }
+      banner.textContent = 'Please upload at least 1 photo.';
+      banner.scrollIntoView({behavior: 'smooth', block: 'center'});
+    }
+  });
 
   if (catEl && catEl.value) refreshSubcategory(initialSub);
   refreshListingType();
@@ -488,6 +636,7 @@
   refreshBehaviour();
   refreshWarranty();
   refreshDeposit();
+  refreshCategoryFields();
   refreshAttributeSection();
 
   // Region → town wiring
@@ -515,6 +664,8 @@
 function updatePhotoLabel(input) {
   var label   = document.getElementById('photo-label');
   var preview = document.getElementById('photo-preview');
+  var errBanner = document.getElementById('photo-error-inline');
+  if (errBanner && input.files.length > 0) errBanner.remove();
   var files   = Array.from(input.files).slice(0, 3);
   label.textContent = files.length > 0
     ? files.length + ' photo' + (files.length > 1 ? 's' : '') + ' selected'
