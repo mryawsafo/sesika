@@ -36,13 +36,16 @@
           <a href="{% url 'listing_detail' listing.pk %}" class="listing-title" style="text-decoration:none;">
             {{ listing.title }}
           </a>
-          <div class="listing-price" style="font-size:15px;">
-            <span class="ghs">GHS</span>{{ listing.final_estimated_value|floatformat:0 }}
-          </div>
+          {% if listing.final_estimated_value %}<div class="listing-price" style="font-size:15px;"><span class="ghs">GHS</span>{{ listing.final_estimated_value|floatformat:0 }}</div>{% endif %}
           {% if listing.status == 'pending_review' %}
             <p style="font-size:0.78rem; color:#92400e; margin:0;">⏳ Under review — visible to you only until approved.</p>
           {% elif listing.status == 'rejected' %}
             <p style="font-size:0.78rem; color:var(--danger); margin:0;">❌ Rejected{% if listing.rejection_reason %}: {{ listing.rejection_reason }}{% endif %}</p>
+          {% endif %}
+          {% if listing.listing_behaviour == 'temporary' and listing.expires_at %}
+            <div style="font-size:0.78rem; color:#92400e; margin-bottom:4px;">
+              ⏳ Expires {{ listing.expires_at|date:"d M Y" }}
+            </div>
           {% endif %}
           <div class="mylist-stats">
             <div class="ml-stat {% if listing.offer_count > 0 %}highlight{% endif %}">

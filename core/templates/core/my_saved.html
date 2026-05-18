@@ -33,7 +33,7 @@
               {% endif %}
             </div>
             <h3 class="listing-title">{{ listing.title }}</h3>
-            <div class="listing-price"><span class="ghs">GHS</span>{{ listing.final_estimated_value|floatformat:0 }}</div>
+            {% if listing.final_estimated_value %}<div class="listing-price"><span class="ghs">GHS</span>{{ listing.final_estimated_value|floatformat:0 }}</div>{% endif %}
             <div class="wants-chip">
               <span class="wc-label">WANTS:</span>
               <span class="wc-text">{{ listing.want_text|truncatechars:60 }}</span>

@@ -45,7 +45,7 @@
       </div>
     {% endif %}
     <div style="font-size:0.88rem; margin-bottom:6px;">
-      <strong>Listing estimated at:</strong> GHS {{ offer.listing.final_estimated_value|floatformat:0 }}
+      {% if offer.listing.final_estimated_value %}<strong>Listing estimated at:</strong> GHS {{ offer.listing.final_estimated_value|floatformat:0 }}{% endif %}
     </div>
     {% if offer.message %}
       <div style="font-size:0.88rem; margin-top:8px;">

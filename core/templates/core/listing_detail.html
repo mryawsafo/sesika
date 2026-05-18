@@ -5,15 +5,16 @@
 
 {% block meta_description %}
 <meta name="description" content="{{ listing.seo_description|default:listing.description|truncatechars:160 }}">
-<link rel="canonical" href="https://{{ request.get_host }}/listings/{{ listing.pk }}/">
+<link rel="canonical" href="https://{{ request.get_host }}/listings/{{ listing.slug|default:listing.pk }}/">
 {% endblock %}
 
 {% block og_tags %}
 <meta property="og:type" content="product">
 <meta property="og:title" content="{{ listing.seo_title|default:listing.title }}">
 <meta property="og:description" content="{{ listing.seo_description|default:listing.description|truncatechars:160 }}">
-<meta property="og:url" content="https://{{ request.get_host }}/listings/{{ listing.pk }}/">
-{% if listing.primary_photo %}<meta property="og:image" content="{{ listing.primary_photo.image.url }}">{% endif %}
+<meta property="og:url" content="https://{{ request.get_host }}/listings/{{ listing.slug|default:listing.pk }}/">
+{% if listing.primary_photo %}<meta property="og:image" content="{{ listing.primary_photo.image.url }}">
+{% else %}<meta property="og:image" content="https://{{ request.get_host }}/static/img/sesika-share.png">{% endif %}
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{ listing.seo_title|default:listing.title }}">
 <meta name="twitter:description" content="{{ listing.seo_description|default:listing.description|truncatechars:160 }}">
@@ -24,18 +25,30 @@
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "Product",
-  "name": "{{ listing.title|escapejs }}",
-  "description": "{{ listing.description|truncatechars:300|escapejs }}",
-  "url": "https://{{ request.get_host }}/listings/{{ listing.pk }}/",
-  {% if listing.primary_photo %}"image": "{{ listing.primary_photo.image.url }}",{% endif %}
-  "offers": {
-    "@type": "Offer",
-    "priceCurrency": "GHS",
-    "price": "{{ listing.user_estimated_value }}",
-    "availability": "{% if listing.status == 'active' %}https://schema.org/InStock{% else %}https://schema.org/OutOfStock{% endif %}"
-  }{% if listing.condition %},
-  "itemCondition": "{% if listing.condition == 'excellent' %}https://schema.org/NewCondition{% elif listing.condition == 'good' or listing.condition == 'fair' %}https://schema.org/UsedCondition{% else %}https://schema.org/DamagedCondition{% endif %}"{% endif %}
+  "@graph": [
+    {
+      "@type": "Product",
+      "name": "{{ listing.title|escapejs }}",
+      "description": "{{ listing.description|truncatechars:300|escapejs }}",
+      "url": "https://{{ request.get_host }}/listings/{{ listing.slug|default:listing.pk }}/",
+      {% if listing.primary_photo %}"image": "{{ listing.primary_photo.image.url }}",{% endif %}
+      "offers": {
+        "@type": "Offer",
+        "priceCurrency": "GHS",
+        "price": "{{ listing.user_estimated_value }}",
+        "availability": "{% if listing.status == 'active' %}https://schema.org/InStock{% else %}https://schema.org/OutOfStock{% endif %}"
+      }{% if listing.condition %},
+      "itemCondition": "{% if listing.condition == 'excellent' %}https://schema.org/NewCondition{% elif listing.condition == 'good' or listing.condition == 'fair' %}https://schema.org/UsedCondition{% else %}https://schema.org/DamagedCondition{% endif %}"{% endif %}
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {"@type": "ListItem", "position": 1, "name": "Marketplace", "item": "https://{{ request.get_host }}/"},
+        {"@type": "ListItem", "position": 2, "name": "{{ listing.get_category_display }}", "item": "https://{{ request.get_host }}/?category={{ listing.category }}"},
+        {"@type": "ListItem", "position": 3, "name": "{{ listing.title|escapejs }}"}
+      ]
+    }
+  ]
 }
 </script>
 {% endblock %}
@@ -225,6 +238,7 @@
       {% endif %}
     </div>
     {% else %}
+    {% if listing.final_estimated_value %}
     <!-- Trade value card -->
     <div class="side-card value-card">
       <div class="label-up">Estimated value</div>
@@ -232,13 +246,10 @@
       <div class="compare">
         Your estimate: <strong>GHS {{ listing.user_estimated_value|floatformat:0 }}</strong><br>
         Market average: <strong>GHS {{ listing.system_estimated_value|floatformat:0 }}</strong>
-        {% if listing.market_price %}
-          <span style="color:var(--text-3);"> · market data</span>
-        {% else %}
-          <span style="color:var(--text-3);"> · category baseline</span>
-        {% endif %}
+        <span style="color:var(--text-3);"> · market data</span>
       </div>
     </div>
+    {% endif %}
     {% endif %}
 
     <!-- Demand signal -->
@@ -287,6 +298,49 @@
             {% if is_saved %}🔖 Saved — Remove{% else %}🔖 Save Listing{% endif %}
           </button>
         </form>
+      </div>
+    {% endif %}
+
+    <!-- Share -->
+    <div class="side-card" style="text-align:center;">
+      <div class="label-up" style="margin-bottom:8px;">Share this listing</div>
+      <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+        <a href="https://wa.me/?text={{ listing.title|urlencode }}%20—%20https%3A%2F%2F{{ request.get_host }}%2Flistings%2F{{ listing.slug|default:listing.pk }}%2F"
+           target="_blank" rel="noopener" class="btn btn-whatsapp btn-sm">💬 Share on WhatsApp</a>
+        <button type="button" onclick="navigator.clipboard.writeText('https://{{ request.get_host }}/listings/{{ listing.slug|default:listing.pk }}/').then(function(){this.textContent='✓ Copied!';}.bind(this))" class="btn btn-secondary btn-sm">🔗 Copy link</button>
+      </div>
+    </div>
+
+    <!-- Expiry countdown (temporary listings, owner only) -->
+    {% if is_owner and listing.listing_behaviour == 'temporary' and listing.expires_at %}
+      <div class="side-card" style="background:#fffbeb; border-color:#fcd34d;">
+        <div class="label-up" style="margin-bottom:4px; color:#92400e;">⏳ Listing expiry</div>
+        <div style="font-size:0.88rem; color:var(--text-2);">
+          Expires: <strong>{{ listing.expires_at|date:"d M Y, H:i" }}</strong>
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- Report listing (non-owners, logged in) -->
+    {% if barter_user and not is_owner %}
+      <div class="side-card" style="text-align:center;">
+        <details style="text-align:left;">
+          <summary style="font-size:0.8rem; color:var(--text-3); cursor:pointer;">Report this listing</summary>
+          <form method="post" action="{% url 'report_listing' listing.pk %}" style="margin-top:10px;">
+            {% csrf_token %}
+            <select name="reason" required style="width:100%; margin-bottom:8px; padding:6px; border-radius:6px; border:1px solid var(--border-soft); font-size:0.85rem;">
+              <option value="">— Select reason —</option>
+              <option value="spam">Spam or duplicate</option>
+              <option value="prohibited">Prohibited item</option>
+              <option value="misleading">Misleading or fake</option>
+              <option value="offensive">Offensive content</option>
+              <option value="scam">Suspected scam</option>
+              <option value="other">Other</option>
+            </select>
+            <textarea name="notes" rows="2" placeholder="Optional details…" style="width:100%; margin-bottom:8px; padding:6px; border-radius:6px; border:1px solid var(--border-soft); font-size:0.85rem; box-sizing:border-box;"></textarea>
+            <button type="submit" class="btn btn-danger btn-sm btn-block">Submit Report</button>
+          </form>
+        </details>
       </div>
     {% endif %}
 
@@ -373,6 +427,30 @@
 
   </aside>
 </div>
+
+{% if similar_listings %}
+<div style="margin-top:32px;">
+  <div class="section-title" style="margin-bottom:14px;">Similar listings</div>
+  <div class="listing-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr));">
+    {% for sl in similar_listings %}
+      <article class="listing-card">
+        <a href="{% url 'listing_detail' sl.pk %}" style="display:contents;">
+          <div class="listing-thumb">
+            {% with photo=sl.primary_photo %}
+              {% if photo %}<img src="{{ photo.image.url }}" alt="{{ sl.title }}" loading="lazy">
+              {% else %}<span style="font-size:1.5rem; opacity:0.4;">📦</span>{% endif %}
+            {% endwith %}
+          </div>
+          <div class="listing-body">
+            <h3 class="listing-title">{{ sl.title }}</h3>
+            <div class="listing-price"><span class="ghs">GHS</span>{{ sl.final_estimated_value|floatformat:0 }}</div>
+          </div>
+        </a>
+      </article>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 
 {% if is_owner and wishlist_count < 3 %}
 <div style="background:#fffbeb; border:1px solid #fcd34d; border-radius:12px; padding:16px 18px; margin-top:20px; display:flex; gap:14px; align-items:flex-start;">
